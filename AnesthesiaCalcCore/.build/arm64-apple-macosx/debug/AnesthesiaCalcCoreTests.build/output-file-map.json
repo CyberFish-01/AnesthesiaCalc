@@ -1,0 +1,33 @@
+{
+  "": {
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/primary.swiftdeps"
+  },
+  "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/Tests/AnesthesiaCalcCoreTests/AIRuleEngineTests.swift": {
+    "dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/AIRuleEngineTests.d",
+    "object": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/AIRuleEngineTests.swift.o",
+    "swiftmodule": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/AIRuleEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/AIRuleEngineTests.swiftdeps",
+    "diagnostics": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/AIRuleEngineTests.dia"
+  },
+  "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/Tests/AnesthesiaCalcCoreTests/CalculationEngineTests.swift": {
+    "dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/CalculationEngineTests.d",
+    "object": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/CalculationEngineTests.swift.o",
+    "swiftmodule": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/CalculationEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/CalculationEngineTests.swiftdeps",
+    "diagnostics": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/CalculationEngineTests.dia"
+  },
+  "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/Tests/AnesthesiaCalcCoreTests/DrugCalculatorTests.swift": {
+    "dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/DrugCalculatorTests.d",
+    "object": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/DrugCalculatorTests.swift.o",
+    "swiftmodule": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/DrugCalculatorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/DrugCalculatorTests.swiftdeps",
+    "diagnostics": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/DrugCalculatorTests.dia"
+  },
+  "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/Tests/AnesthesiaCalcCoreTests/PatientContextTests.swift": {
+    "dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/PatientContextTests.d",
+    "object": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/PatientContextTests.swift.o",
+    "swiftmodule": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/PatientContextTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/PatientContextTests.swiftdeps",
+    "diagnostics": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCoreTests.build/PatientContextTests.dia"
+  }
+}

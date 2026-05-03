@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/primary.swiftdeps"
+  },
+  "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.derived/runner.swift": {
+    "dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/runner.d",
+    "object": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/cyberfish/Desktop/AnesthesiaCalc/AnesthesiaCalcCore/.build/arm64-apple-macosx/debug/AnesthesiaCalcCorePackageTests.build/runner.dia"
+  }
+}
