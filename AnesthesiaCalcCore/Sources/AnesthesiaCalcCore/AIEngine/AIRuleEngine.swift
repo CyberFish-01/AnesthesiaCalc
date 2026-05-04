@@ -116,6 +116,9 @@ public struct DosageRule: Equatable {
         doseInterval: DoseInterval = .bolus,
         note: String? = nil
     ) {
+        precondition(concentrationMgPerMl > 0, "concentrationMgPerMl must be > 0 (got \(concentrationMgPerMl))")
+        precondition(minMultiplier > 0, "minMultiplier must be > 0 (got \(minMultiplier))")
+        precondition(maxMultiplier >= minMultiplier, "maxMultiplier must be >= minMultiplier")
         self.drug                 = drug
         self.doseType             = doseType
         self.minMultiplier        = minMultiplier

@@ -33,6 +33,9 @@ struct CaseRecord: Identifiable, Codable {
     var weightKg: Double?
     /// Standing height in cm — nil for legacy records created before this field was added
     var heightCm: Double?
+    /// Original free-text description entered by the clinician (病历描述).
+    /// Empty for legacy records or records created solely from structured form.
+    var rawInputText: String = ""
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -108,6 +111,7 @@ final class HistoryManager: ObservableObject {
             if !record.anesthesiaPlan.isEmpty { merged.anesthesiaPlan = record.anesthesiaPlan }
             if let w = record.weightKg        { merged.weightKg       = w }
             if let h = record.heightCm        { merged.heightCm       = h }
+            if !record.rawInputText.isEmpty   { merged.rawInputText   = record.rawInputText }
             merged.date = Date()
 
             records.remove(at: idx)

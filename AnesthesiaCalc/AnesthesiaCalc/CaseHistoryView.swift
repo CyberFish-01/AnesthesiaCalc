@@ -260,16 +260,40 @@ struct CaseRecordCard: View {
                 }
             }
 
-            // ── Detail: anesthesia plan, shown when expanded ──────────
+            // ── Detail: dual-track — raw input + AI plan ─────────
             if isExpanded {
                 Divider()
                     .padding(.horizontal, 16)
                     .padding(.vertical, 4)
 
-                MarkdownText(
-                    source: record.anesthesiaPlan.isEmpty ? "暂无计划" : record.anesthesiaPlan
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Track 1: 原始输入记录 (smart dedup — skip fields already in header)
+                if hasRawInput {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("原始记录")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        rawInputDetails
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+
+                    Divider()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                }
+
+                // Track 2: AI 决策总结
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI 决策总结")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    MarkdownText(
+                        source: record.anesthesiaPlan.isEmpty ? "暂无计划" : record.anesthesiaPlan
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 14)
                 .transition(.opacity)
@@ -278,6 +302,39 @@ struct CaseRecordCard: View {
         .background(Color(UIColor.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+    }
+
+    // ── Raw input dedup ───────────────────────────────────────────────
+
+    /// True when there is original input data beyond what the header already shows.
+    private var hasRawInput: Bool {
+        (record.weightKg.map { $0 > 0 } ?? false)
+        || (record.heightCm.map { $0 > 0 } ?? false)
+        || !record.rawInputText.isEmpty
+    }
+
+    /// Filtered original input — excludes fields already rendered in the header
+    /// (name, age, hospital-number, surgery, conditions).
+    @ViewBuilder
+    private var rawInputDetails: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let w = record.weightKg, w > 0 {
+                Text("体重：\(String(format: "%.1f", w)) kg")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let h = record.heightCm, h > 0 {
+                Text("身高：\(String(format: "%.1f", h)) cm")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !record.rawInputText.isEmpty {
+                Text(record.rawInputText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(8)
+            }
+        }
     }
 
     // ── Condition tags ────────────────────────────────────────────────

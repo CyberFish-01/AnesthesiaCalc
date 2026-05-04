@@ -4,17 +4,57 @@ import AnesthesiaCalcCore
 
 // MARK: - ClinicalContext
 
-/// 全局临床上下文单例 — 实时同步计算器页面的患者画像与药物列表，
-/// 使问答 (MaLeMeView / ConsultView) 页面初始化时可自动读取当前临床背景。
+/// 全局临床上下文单例 — 患者画像与药物列表的唯一权威数据源 (Single Source of Truth)。
+///
+/// 所有视图通过 `@ObservedObject var ctx = ClinicalContext.shared` 绑定，
+/// 确保跨页面（计算器、AI 决策、会诊、问答）数据绝对同步。
 final class ClinicalContext: ObservableObject {
     static let shared = ClinicalContext()
 
-    @Published var patient: Patient?
+    // ── Patient identity ────────────────────────────────────────────────
+    @Published var patientName: String = ""
+    @Published var hospitalNumber: String = ""
+
+    // ── String-backed TextField bindings ─────────────────────────────────
+    @Published var weightInput: String = "70"
+    @Published var heightInput: String = "170"
+    @Published var ageText: String = "40"
+    @Published var isMale: Bool = true
+
+    // ── Canonical Double values (validated from string inputs) ───────────
+    @Published var patientWeight: Double = 70.0
+    @Published var patientHeight: Double = 170.0
+
+    // ── Drug context ─────────────────────────────────────────────────────
     @Published var activeDrugs: [AnesthesiaDrug] = []
 
-    /// 由 ContentView 在每次患者数据变化时调用
+    // ── Derived ──────────────────────────────────────────────────────────
+    var patient: Patient? {
+        guard patientWeight > 0, patientHeight > 0,
+              let age = Int(ageText), age >= 0 else { return nil }
+        return Patient(weight: patientWeight, height: patientHeight,
+                       age: age, sex: isMale ? .male : .female)
+    }
+
+    /// Backward-compatible sync — used when external code pushes a full patient snapshot.
     func sync(patient: Patient?, drugs: [AnesthesiaDrug]) {
-        self.patient = patient
+        self.activeDrugs = drugs
+        guard let p = patient else {
+            patientWeight = 0
+            patientHeight = 0
+            return
+        }
+        patientWeight = p.weight
+        patientHeight = p.height
+        isMale = p.sex == .male
+        ageText = String(p.age)
+        weightInput = p.weight.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", p.weight) : String(format: "%.1f", p.weight)
+        heightInput = p.height.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", p.height) : String(format: "%.1f", p.height)
+    }
+
+    func syncDrugs(_ drugs: [AnesthesiaDrug]) {
         self.activeDrugs = drugs
     }
 

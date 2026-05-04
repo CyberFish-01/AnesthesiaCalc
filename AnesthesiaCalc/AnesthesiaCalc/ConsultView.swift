@@ -55,6 +55,7 @@ struct ConsultView: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("完成") { isInputFocused = false }
+                        .font(.body.bold())
                 }
             }
             .onAppear {

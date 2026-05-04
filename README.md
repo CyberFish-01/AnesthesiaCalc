@@ -50,6 +50,18 @@
 
 ## 技术架构
 
+### 数据流与状态治理 (Single Source of Truth)
+
+所有患者核心体征（姓名、住院号、体重、身高、年龄、性别）统一由 `ClinicalContext.shared` 以 `@Published` 持有并广播。各视图通过 `@ObservedObject` 直接绑定，**彻底废弃**各视图私有的 `@State` 变量。这确保了计算器、AI 决策、会诊、问答四个页面间的患者数据绝对同步。
+
+```
+ClinicalContext.shared (Single Source of Truth, @Published)
+  └─→ Patient (轻量计算输入)
+        └─→ DrugCalculator.calculateDose(...)
+              └─→ DrugDoseRange (标准化结果，含体积/流速/体重基准)
+                    └─→ View 渲染
+```
+
 ```
 AnesthesiaCalc/
 ├── AnesthesiaCalcCore/         # Swift Package — 纯计算逻辑层
@@ -57,35 +69,38 @@ AnesthesiaCalc/
 │       ├── AIEngine/           # AIAssistantService、AIRuleEngine
 │       ├── DrugLibrary/        # AnesthesiaDrug、DosageRule、DrugCalculator
 │       │                       # DrugCatalog (45 种)、DrugManager (持久化)
+│       │                       # Patient (计算输入结构体)
 │       ├── Engine/             # CalculationEngine、PediatricLogic
 │       │                       # PropofolCalculator、RiskEngine
-│       └── Models/             # PatientContext、DoseUnit、ClinicalContext
+│       └── Models/             # PatientContext、DoseUnit
 ├── AnesthesiaCalc/             # App Target — 纯 UI 展示层
 │   └── AnesthesiaCalc/
 │       ├── ContentView.swift          # 主计算器 + 分类分组
 │       ├── UniversalDrugCardView.swift  # 通用药品卡片模板
+│       ├── ClinicalContext.swift      # 全局临床上下文 (SSOT)
 │       ├── AIDecisionView.swift       # AI 麻醉方案生成
 │       ├── MaLeMeView.swift           # "麻了么"问答
 │       ├── SettingsView.swift         # 设置、药物管理、编辑模式
-│       ├── CaseHistoryView.swift      # 病例历史
+│       ├── CaseHistoryView.swift      # 病例历史（双轨: 原始输入 + AI 计划）
 │       ├── QAHistoryView.swift        # 问答历史
 │       ├── DrugDeepDiveView.swift     # 药品知识库详情
 │       ├── DrugDeepDiveStore.swift    # 知识库数据层
 │       ├── KnowledgeProvider.swift    # 知识检索
 │       ├── ActiveMonitorView.swift    # 术中监测
-│       ├── ConsultView.swift          # 会诊视图
-│       └── ClinicalContext.swift      # 临床上下文
+│       └── ConsultView.swift          # 会诊视图
 └── Architecture.md / Harness.md / CLAUDE.md  # 项目治理文档
 ```
 
 ### 架构红线
-- **Core 层**：仅 `import Foundation`，零 UI 依赖，零视觉属性
+- **Core 层**：仅 `import Foundation`，零 UI 依赖，零视觉属性。含除零保护 (`concentrationMgPerMl > 0` guard)。
 - **UI 层**：零药物数学公式（`weight * dose / concentration` 等），所有计算均委托 Core 公开 API
-- 数据流：`PatientContext` → `DrugCalculator.calculateDose(...)` → `DrugDoseRange` → View 渲染
+- **状态归一**：患者数据仅存于 `ClinicalContext.shared`，视图间通过 `@ObservedObject` 订阅，无状态孤岛
 
 ### 关键类型
-- `PatientContext` — 患者快照（TBW/IBW/LBW/BMI，线程安全值类型）
-- `DosageRule` — 可替换的剂量规则（含 `doseType`、`doseInterval`、`weightBase`、龄调整）
+- `ClinicalContext` — 全局临床上下文单例 (`ObservableObject`)，持有 String-backed TextField 绑定与规范化 Double 值，跨页面广播
+- `Patient` — 轻量计算输入结构体（TBW/IBW/LBW/BMI，值类型），由 `ClinicalContext` 派生供 `DrugCalculator` 使用
+- `PatientContext` — 患者完整画像（TBW/IBW/LBW/BMI 计算，Devine/Boer 公式）
+- `DosageRule` — 可替换的剂量规则（含 `doseType`、`doseInterval`、`weightBase`、龄调整，含 `precondition` 约束）
 - `DrugDoseRange` — 标准化计算结果（含体积、流速、体重基准、钳制标记等）
 - `AnesthesiaDrug` — 药物实体（双规则集 AI+手动、可见性状态、浓度）
 - `DrugManager` — 单例持久化管理器（`@Published allDrugs`，JSON → UserDefaults）

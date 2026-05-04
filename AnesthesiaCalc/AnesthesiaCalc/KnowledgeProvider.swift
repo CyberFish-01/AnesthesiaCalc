@@ -292,8 +292,12 @@ final class KnowledgeProvider {
 
         for entry in entries {
             let score = entry.keywords.reduce(0) { $0 + (lower.contains($1) ? 1 : 0) }
-            if score > 0 && (best == nil || score > best!.score) {
-                best = (entry, score)
+            if score > 0 {
+                if let b = best {
+                    if score > b.score { best = (entry, score) }
+                } else {
+                    best = (entry, score)
+                }
             }
         }
         guard let b = best, b.score >= threshold else { return nil }

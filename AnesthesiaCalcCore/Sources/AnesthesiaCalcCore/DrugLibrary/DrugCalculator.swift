@@ -40,9 +40,16 @@ public struct DrugDoseRange: Equatable {
         DoseUnit(rawValue: unit)?.toMgFactor ?? 1.0
     }
 
-    /// Volume in mL (or mL/h, mL/min — matches `doseInterval`)
-    public var minVolumeMl: Double { (minDose * toMgFactor) / concentrationMgPerMl }
-    public var maxVolumeMl: Double { (maxDose * toMgFactor) / concentrationMgPerMl }
+    /// Volume in mL (or mL/h, mL/min — matches `doseInterval`).
+    /// Returns 0 when concentration is invalid to avoid inf/nan.
+    public var minVolumeMl: Double {
+        guard concentrationMgPerMl > 0 else { return 0 }
+        return (minDose * toMgFactor) / concentrationMgPerMl
+    }
+    public var maxVolumeMl: Double {
+        guard concentrationMgPerMl > 0 else { return 0 }
+        return (maxDose * toMgFactor) / concentrationMgPerMl
+    }
 
     // ── Formula trace ──────────────────────────────────────────────────
 
@@ -67,7 +74,7 @@ public struct DrugDoseRange: Equatable {
         return [0.8, 1.0, 1.2].map { ratio in
             let dosePerKg = ratio * midMultiplier
             let totalDoseMg = dosePerKg * weightUsed * toMg
-            let rate = totalDoseMg / concentrationMgPerMl
+            let rate = concentrationMgPerMl > 0 ? totalDoseMg / concentrationMgPerMl : 0
             return (dosePerKg, rate)
         }
     }
@@ -382,6 +389,7 @@ public final class DrugCalculator {
     ) -> String {
         let toMg  = DoseUnit(rawValue: rule.unit)?.toMgFactor ?? 1.0
         let conc  = drug.defaultConcentration              // mg/mL (user-editable)
+        guard conc > 0 else { return "" }
         let minMl = (rule.minMultiplier * weight * toMg) / conc
         let maxMl = (rule.maxMultiplier * weight * toMg) / conc
 

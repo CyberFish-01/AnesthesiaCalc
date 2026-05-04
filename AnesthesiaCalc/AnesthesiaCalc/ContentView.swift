@@ -10,21 +10,8 @@ import AnesthesiaCalcCore
 
 struct CalculatorHomeView: View {
 
-    // ── Patient identity ──────────────────────────────────────────────────
-    @State private var patientName:     String = ""
-    @State private var hospitalNumber:  String = ""
-
-    // ── Primary patient anthropometrics ───────────────────────────────────
-    @State private var patientWeight: Double = 70.0
-    @State private var patientHeight: Double = 170.0
-    @State private var isMale:        Bool   = true
-
-    // ── String backing for numeric TextFields ─────────────────────────────
-    // TextFields bind to String for smooth per-keystroke UX;
-    // onChange syncs each String → its canonical Double @State var.
-    @State private var weightInput = "70"
-    @State private var heightInput = "170"
-    @State private var ageText     = "40"
+    // ── Single source of truth — global patient context ────────────────────
+    @ObservedObject private var ctx = ClinicalContext.shared
 
     // ── Pediatric mode ─────────────────────────────────────────────────────
     @State private var pediatricOverride: Bool = false
@@ -39,8 +26,8 @@ struct CalculatorHomeView: View {
     @State private var archiveAlertMessage: String = ""
 
     // ── Shared managers ───────────────────────────────────────────────────
-    @StateObject private var drugManager    = DrugManager.shared
-    @StateObject private var historyManager = HistoryManager.shared
+    @ObservedObject private var drugManager    = DrugManager.shared
+    @ObservedObject private var historyManager = HistoryManager.shared
 
     private let calculator = DrugCalculator()
 
@@ -48,21 +35,14 @@ struct CalculatorHomeView: View {
     // MARK: — Derived state
     // ══════════════════════════════════════════════════════════════════════
 
-    private var patient: Patient? {
-        guard patientWeight > 0, patientHeight > 0,
-              let age = Int(ageText), age >= 0 else { return nil }
-        return Patient(weight: patientWeight, height: patientHeight,
-                       age: age, sex: isMale ? .male : .female)
-    }
-
     private var weightSummary: String? {
-        guard let p = patient else { return nil }
+        guard let p = ctx.patient else { return nil }
         return String(format: "BMI %.1f  ·  IBW %.1f kg  ·  LBW %.1f kg",
                       p.bmi, p.idealBodyWeight, p.leanBodyWeight)
     }
 
     private var pediatricStatus: PediatricStatus {
-        guard let p = patient else { return .inactive }
+        guard let p = ctx.patient else { return .inactive }
         if pediatricOverride { return .active }
         return PediatricLogic.assess(age: p.age, weightKg: p.weight)
     }
@@ -70,7 +50,7 @@ struct CalculatorHomeView: View {
     private var isPediatricActive: Bool { pediatricStatus == .active }
 
     private var monitorAlert: MonitorAlert? {
-        ActiveMonitor.check(patient: patient, drugs: drugManager.activeDrugs)
+        ActiveMonitor.check(patient: ctx.patient, drugs: drugManager.activeDrugs)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -113,6 +93,7 @@ struct CalculatorHomeView: View {
                             to: nil, from: nil, for: nil
                         )
                     }
+                    .font(.body.bold())
                 }
             }
             .sheet(isPresented: $showImportSheet) {
@@ -127,14 +108,8 @@ struct CalculatorHomeView: View {
             .alert(archiveAlertMessage, isPresented: $showArchiveAlert) {
                 Button("好", role: .cancel) {}
             }
-            .onAppear {
-                ClinicalContext.shared.sync(patient: patient, drugs: drugManager.activeDrugs)
-            }
-            .onChange(of: patient) { _, p in
-                ClinicalContext.shared.sync(patient: p, drugs: drugManager.activeDrugs)
-            }
             .onChange(of: drugManager.allDrugs) { _, _ in
-                ClinicalContext.shared.sync(patient: patient, drugs: drugManager.activeDrugs)
+                ctx.syncDrugs(drugManager.activeDrugs)
             }
         }
     }
@@ -163,27 +138,27 @@ struct CalculatorHomeView: View {
             LazyVGrid(columns: columns, spacing: 10) {
 
                 // Row 1 — identity
-                CompactTextField(icon: "person.fill",  title: "姓名",   placeholder: "请输入", text: $patientName)
-                CompactTextField(icon: "number",       title: "住院号", placeholder: "请输入", text: $hospitalNumber)
+                CompactTextField(icon: "person.fill",  title: "姓名",   placeholder: "请输入", text: $ctx.patientName)
+                CompactTextField(icon: "number",       title: "住院号", placeholder: "请输入", text: $ctx.hospitalNumber)
 
-                // Row 2 — anthropometrics
+                // Row 2 — anthropometrics (P3: zero out on empty/invalid input)
                 CompactTextField(icon: "scalemass.fill", title: "体重 (kg)", placeholder: "70",
-                                 text: $weightInput, keyboard: .decimalPad)
-                    .onChange(of: weightInput) { _, v in
+                                 text: $ctx.weightInput, keyboard: .decimalPad)
+                    .onChange(of: ctx.weightInput) { _, v in
                         let s = v.replacingOccurrences(of: ",", with: ".")
-                        if let d = Double(s), d > 0 { patientWeight = d }
+                        ctx.patientWeight = (Double(s).map { $0 > 0 ? $0 : 0 }) ?? 0
                     }
                 CompactTextField(icon: "ruler.fill", title: "身高 (cm)", placeholder: "170",
-                                 text: $heightInput, keyboard: .decimalPad)
-                    .onChange(of: heightInput) { _, v in
+                                 text: $ctx.heightInput, keyboard: .decimalPad)
+                    .onChange(of: ctx.heightInput) { _, v in
                         let s = v.replacingOccurrences(of: ",", with: ".")
-                        if let d = Double(s), d > 0 { patientHeight = d }
+                        ctx.patientHeight = (Double(s).map { $0 > 0 ? $0 : 0 }) ?? 0
                     }
 
                 // Row 3 — age + gender
                 CompactTextField(icon: "calendar", title: "年龄 (岁)", placeholder: "40",
-                                 text: $ageText, keyboard: .numberPad)
-                CompactGenderPicker(isMale: $isMale)
+                                 text: $ctx.ageText, keyboard: .numberPad)
+                CompactGenderPicker(isMale: $ctx.isMale)
             }
 
             // Derived weight summary
@@ -218,7 +193,7 @@ struct CalculatorHomeView: View {
                     ForEach(grouped[category] ?? []) { drug in
                         UniversalDrugCardView(
                             drug: drug,
-                            patient: patient,
+                            patient: ctx.patient,
                             calculator: calculator,
                             isPediatricActive: isPediatricActive
                         )
@@ -283,16 +258,16 @@ struct CalculatorHomeView: View {
     /// One-tap archive: upserts the current patient using `hospitalNumber` as
     /// the unique key — merges into an existing record or creates a new one.
     private func archiveCurrentPatient() {
-        let ageStr = ageText.isEmpty ? "0岁" : "\(ageText)岁"
+        let ageStr = ctx.ageText.isEmpty ? "0岁" : "\(ctx.ageText)岁"
         let record = CaseRecord(
-            patientName:    patientName.isEmpty ? "佚名" : patientName,
-            hospitalNumber: hospitalNumber,
+            patientName:    ctx.patientName.isEmpty ? "佚名" : ctx.patientName,
+            hospitalNumber: ctx.hospitalNumber,
             age:            ageStr,
             surgery:        "",
             conditions:     [],
             anesthesiaPlan: "",
-            weightKg:       patientWeight,
-            heightCm:       patientHeight
+            weightKg:       ctx.patientWeight,
+            heightCm:       ctx.patientHeight
         )
         archiveAlertMessage = historyManager.upsert(record).message
         showArchiveAlert = true
@@ -300,22 +275,22 @@ struct CalculatorHomeView: View {
 
     /// Populate all patient fields from a tapped CaseRecord.
     private func applyRecord(_ record: CaseRecord) {
-        patientName    = record.patientName
-        hospitalNumber = record.hospitalNumber
+        ctx.patientName    = record.patientName
+        ctx.hospitalNumber = record.hospitalNumber
 
         let rawAge = record.age
             .replacingOccurrences(of: "岁", with: "")
             .trimmingCharacters(in: .whitespaces)
-        ageText = rawAge.isEmpty ? "40" : rawAge
+        ctx.ageText = rawAge.isEmpty ? "40" : rawAge
 
         if let w = record.weightKg, w > 0 {
-            patientWeight = w
-            weightInput   = w.truncatingRemainder(dividingBy: 1) == 0
+            ctx.patientWeight = w
+            ctx.weightInput   = w.truncatingRemainder(dividingBy: 1) == 0
                 ? String(format: "%.0f", w) : String(format: "%.1f", w)
         }
         if let h = record.heightCm, h > 0 {
-            patientHeight = h
-            heightInput   = h.truncatingRemainder(dividingBy: 1) == 0
+            ctx.patientHeight = h
+            ctx.heightInput   = h.truncatingRemainder(dividingBy: 1) == 0
                 ? String(format: "%.0f", h) : String(format: "%.1f", h)
         }
     }

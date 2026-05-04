@@ -12,6 +12,9 @@ import AnesthesiaCalcCore
 
 struct AIDecisionView: View {
 
+    // ── Global clinical context ───────────────────────────────────────
+    @ObservedObject private var ctx = ClinicalContext.shared
+
     // ── Free-text input ──────────────────────────────────────────────
     @State private var freeText = ""
 
@@ -55,6 +58,7 @@ struct AIDecisionView: View {
                 .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
                 .navigationTitle("AI 决策")
                 .navigationBarTitleDisplayMode(.large)
+                .onAppear { prefillFromContext() }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         NavigationLink(destination: CaseHistoryView()) {
@@ -271,6 +275,26 @@ struct AIDecisionView: View {
         return parts.joined(separator: "\n")
     }
 
+    /// Pre-fill structured form fields from the global clinical context
+    /// when the user has already entered patient data on the Calculator tab.
+    private func prefillFromContext() {
+        if formName.isEmpty && !ctx.patientName.isEmpty {
+            formName = ctx.patientName
+        }
+        if formHospitalNumber.isEmpty && !ctx.hospitalNumber.isEmpty {
+            formHospitalNumber = ctx.hospitalNumber
+        }
+        if formAge.isEmpty, let p = ctx.patient {
+            formAge = "\(p.age)岁"
+        }
+        if formSurgery.isEmpty {
+            // surgery is not yet tracked in ClinicalContext; keep as-is
+        }
+        if formConditions.isEmpty {
+            // conditions are not yet tracked in ClinicalContext; keep as-is
+        }
+    }
+
     private func generate() {
         isFreeTextFocused = false
         let combined = buildCombinedInput()
@@ -289,7 +313,10 @@ struct AIDecisionView: View {
                     age:            response.patient.age,
                     surgery:        response.patient.surgery,
                     conditions:     response.patient.conditions,
-                    anesthesiaPlan: response.plan
+                    anesthesiaPlan: response.plan,
+                    weightKg:       ctx.patientWeight > 0 ? ctx.patientWeight : nil,
+                    heightCm:       ctx.patientHeight > 0 ? ctx.patientHeight : nil,
+                    rawInputText:   freeText.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
                 savedUpsertResult = history.upsert(record)
                 savedRecord       = record

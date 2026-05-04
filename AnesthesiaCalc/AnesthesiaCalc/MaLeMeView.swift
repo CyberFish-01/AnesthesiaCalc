@@ -65,6 +65,7 @@ struct MaLeMeView: View {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
                         Button("完成") { isEditorFocused = false }
+                            .font(.body.bold())
                     }
                 }
             }
