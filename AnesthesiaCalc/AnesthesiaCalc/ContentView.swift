@@ -26,6 +26,13 @@ struct CalculatorHomeView: View {
     @State private var heightInput = "170"
     @State private var ageText     = "40"
 
+    // ── Pediatric mode ─────────────────────────────────────────────────────
+    @State private var pediatricOverride: Bool = false
+
+    // ── Consult / Monitor ──────────────────────────────────────────────────
+    @State private var showConsultView:      Bool   = false
+    @State private var consultPrefillQuestion: String = ""
+
     // ── Sheet / alert presentation ────────────────────────────────────────
     @State private var showImportSheet:   Bool   = false
     @State private var showArchiveAlert:  Bool   = false
@@ -54,6 +61,18 @@ struct CalculatorHomeView: View {
                       p.bmi, p.idealBodyWeight, p.leanBodyWeight)
     }
 
+    private var pediatricStatus: PediatricStatus {
+        guard let p = patient else { return .inactive }
+        if pediatricOverride { return .active }
+        return PediatricLogic.assess(age: p.age, weightKg: p.weight)
+    }
+
+    private var isPediatricActive: Bool { pediatricStatus == .active }
+
+    private var monitorAlert: MonitorAlert? {
+        ActiveMonitor.check(patient: patient, drugs: drugManager.activeDrugs)
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // MARK: — Body
     // ══════════════════════════════════════════════════════════════════════
@@ -63,6 +82,15 @@ struct CalculatorHomeView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     patientCard
+                    if pediatricStatus == .prompt {
+                        pediatricPromptButton
+                    }
+                    if let alert = monitorAlert {
+                        ActiveMonitorBanner(alert: alert) {
+                            consultPrefillQuestion = alert.prefillQuestion
+                            showConsultView = true
+                        }
+                    }
                     drugCardsSection
                 }
                 .padding(.horizontal)
@@ -93,8 +121,20 @@ struct CalculatorHomeView: View {
                     showImportSheet = false
                 }
             }
+            .sheet(isPresented: $showConsultView) {
+                ConsultView(initialQuestion: consultPrefillQuestion)
+            }
             .alert(archiveAlertMessage, isPresented: $showArchiveAlert) {
                 Button("好", role: .cancel) {}
+            }
+            .onAppear {
+                ClinicalContext.shared.sync(patient: patient, drugs: drugManager.activeDrugs)
+            }
+            .onChange(of: patient) { _, p in
+                ClinicalContext.shared.sync(patient: p, drugs: drugManager.activeDrugs)
+            }
+            .onChange(of: drugManager.allDrugs) { _, _ in
+                ClinicalContext.shared.sync(patient: patient, drugs: drugManager.activeDrugs)
             }
         }
     }
@@ -165,11 +205,75 @@ struct CalculatorHomeView: View {
     // ══════════════════════════════════════════════════════════════════════
 
     private var drugCardsSection: some View {
-        VStack(spacing: 10) {
-            ForEach(drugManager.activeDrugs) { drug in
-                UniversalDrugCardView(drug: drug, patient: patient, calculator: calculator)
+        let grouped = groupedDrugs
+        let sortedKeys = grouped.keys.sorted { a, b in
+            let ia = DrugCatalog.categoryOrder.firstIndex(of: a) ?? Int.max
+            let ib = DrugCatalog.categoryOrder.firstIndex(of: b) ?? Int.max
+            return ia < ib
+        }
+        return VStack(spacing: 16) {
+            ForEach(sortedKeys, id: \.self) { category in
+                VStack(alignment: .leading, spacing: 8) {
+                    categoryHeader(category)
+                    ForEach(grouped[category] ?? []) { drug in
+                        UniversalDrugCardView(
+                            drug: drug,
+                            patient: patient,
+                            calculator: calculator,
+                            isPediatricActive: isPediatricActive
+                        )
+                    }
+                }
             }
         }
+    }
+
+    /// Group active drugs by their Chinese pharmacological category.
+    private var groupedDrugs: [String: [AnesthesiaDrug]] {
+        var map = [String: [AnesthesiaDrug]]()
+        for drug in drugManager.activeDrugs {
+            let cat = DrugCatalog.category(for: drug.name)
+            map[cat, default: []].append(drug)
+        }
+        // Sort groups by categoryOrder; unknown categories go last
+        return map
+    }
+
+    private func categoryHeader(_ category: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "circle.grid.2x2.fill")
+                .font(.caption)
+                .foregroundColor(.accentColor)
+            Text(category)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.accentColor)
+        }
+        .padding(.top, 4)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // MARK: — Pediatric prompt
+    // ══════════════════════════════════════════════════════════════════════
+
+    private var pediatricPromptButton: some View {
+        Button {
+            pediatricOverride = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "figure.child")
+                    .font(.subheadline)
+                Text("患者年龄或体重接近儿科范围，点击启用儿科模式")
+                    .font(.caption.weight(.medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.orange, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 
     // ══════════════════════════════════════════════════════════════════════

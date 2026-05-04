@@ -10,6 +10,7 @@ public enum DoseType: String, Codable, CaseIterable {
     case maintenance = "maintenance"  // 麻醉维持
     case sedation    = "sedation"     // 镇静
     case analgesia   = "analgesia"    // 镇痛
+    case antagonism  = "antagonism"   // 拮抗（特异性逆转）
 
     /// Short Chinese label for use in segmented pickers and compact UI.
     public var displayName: String {
@@ -19,6 +20,7 @@ public enum DoseType: String, Codable, CaseIterable {
         case .maintenance: return "维持"
         case .sedation:    return "镇静"
         case .analgesia:   return "镇痛"
+        case .antagonism:  return "拮抗"
         }
     }
 }
@@ -109,8 +111,8 @@ public struct DosageRule: Equatable {
         weightBase: WeightBase,
         unit: String,
         concentrationMgPerMl: Double,
-        absoluteMaxDose: Double?,
-        ageAdjustments: [AgeAdjustment]?,
+        absoluteMaxDose: Double? = nil,
+        ageAdjustments: [AgeAdjustment]? = nil,
         doseInterval: DoseInterval = .bolus,
         note: String? = nil
     ) {
@@ -332,164 +334,502 @@ public final class AIRuleEngine {
         let defaults: [DosageRule] = [
 
             // ══════════════════════════════════════════════════════════════
-            // 丙泊酚 (Propofol)
+            // 丙泊酚 (Propofol) — 镇静催眠药
+            // Ref: Miller's Anesthesia 9th Ed., Ch.30 / CSA TIVA 指南 2024
             // ══════════════════════════════════════════════════════════════
 
-            // ── Propofol — Induction ───────────────────────────────────────
-            // Ref: Miller's Anesthesia 9th Ed. / BNF / Fresenius PI
-            // Dose: 1.5–2.5 mg/kg TBW; elderly (≥65 y) reduce by 30 %
             DosageRule(
-                drug:                 AnesthesiaDrug.propofol.name,
-                doseType:             DoseType.induction.rawValue,
-                minMultiplier:        1.5,
-                maxMultiplier:        2.5,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mg.rawValue,
-                concentrationMgPerMl: 10.0,
-                absoluteMaxDose:      300.0,
-                ageAdjustments:       [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.7)],
-                doseInterval:         .bolus
+                drug: "丙泊酚", doseType: DoseType.induction.rawValue,
+                minMultiplier: 1.5, maxMultiplier: 2.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                absoluteMaxDose: 300.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.7)],
+                doseInterval: .bolus
             ),
-
-            // ── Propofol — Maintenance (TIVA) ─────────────────────────────
-            // Ref: Miller's / Schnider TCI model / Fresenius PI
-            // Rate: 4–12 mg/kg/h TBW; titrate to effect (BIS/entropy target)
             DosageRule(
-                drug:                 AnesthesiaDrug.propofol.name,
-                doseType:             DoseType.maintenance.rawValue,
-                minMultiplier:        4.0,
-                maxMultiplier:        12.0,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mg.rawValue,
-                concentrationMgPerMl: 10.0,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .perHour
+                drug: "丙泊酚", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 4.0, maxMultiplier: 12.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .perHour,
+                note: "TCI 血浆靶浓度 3~6 μg/mL (复合阿片类 2~4 μg/mL)"
             ),
-
-            // ── Propofol — Sedation (procedural / ICU) ────────────────────
-            // Ref: BNF / Fresenius PI
-            // Rate: 0.5–4 mg/kg/h TBW; start low, titrate to Ramsay 2–3
             DosageRule(
-                drug:                 AnesthesiaDrug.propofol.name,
-                doseType:             DoseType.sedation.rawValue,
-                minMultiplier:        0.5,
-                maxMultiplier:        4.0,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mg.rawValue,
-                concentrationMgPerMl: 10.0,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .perHour
+                drug: "丙泊酚", doseType: DoseType.sedation.rawValue,
+                minMultiplier: 0.5, maxMultiplier: 4.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .perHour,
+                note: "ICU 镇静 0.5~4 mg/kg/h; 术中唤醒 0.8~1.0 mg/kg/h"
             ),
 
             // ══════════════════════════════════════════════════════════════
-            // 罗库溴铵 (Rocuronium)
+            // 依托咪酯 (Etomidate) — 镇静催眠药
+            // Ref: CSA TIVA 指南 2024 / Miller 9th Ed., Ch.30
             // ══════════════════════════════════════════════════════════════
 
-            // ── Rocuronium — Intubation ────────────────────────────────────
-            // Ref: ESAIC guidelines / Esmeron SmPC
-            // Dose: 0.6–0.9 mg/kg IBW — CRITICAL: IBW prevents overdose in obese
             DosageRule(
-                drug:                 AnesthesiaDrug.rocuronium.name,
-                doseType:             DoseType.intubation.rawValue,
-                minMultiplier:        0.6,
-                maxMultiplier:        0.9,
-                weightBase:           .idealBodyWeight,
-                unit:                 DoseUnit.mg.rawValue,
-                concentrationMgPerMl: 10.0,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .bolus
+                drug: "依托咪酯", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.2, maxMultiplier: 0.6, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 2.0,
+                absoluteMaxDose: 60.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.7)],
+                doseInterval: .bolus,
+                note: "血流动力学稳定，适合老年/心血管高危患者；单次抑制肾上腺皮质"
             ),
-
-            // ── Rocuronium — Maintenance infusion ─────────────────────────
-            // Ref: Esmeron SmPC / Miller's
-            // Rate: 0.3–0.6 mg/kg/h IBW; guided by TOF monitoring
             DosageRule(
-                drug:                 AnesthesiaDrug.rocuronium.name,
-                doseType:             DoseType.maintenance.rawValue,
-                minMultiplier:        0.3,
-                maxMultiplier:        0.6,
-                weightBase:           .idealBodyWeight,
-                unit:                 DoseUnit.mg.rawValue,
-                concentrationMgPerMl: 10.0,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .perHour
+                drug: "依托咪酯", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 5, maxMultiplier: 20, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 2.0,
+                doseInterval: .perMinute,
+                note: "不推荐长时间输注（肾上腺皮质抑制）"
             ),
 
             // ══════════════════════════════════════════════════════════════
-            // 芬太尼 (Fentanyl)
+            // 环泊酚 (Ciprofol) — 镇静催眠药
+            // Ref: CSA TIVA 指南 2024; 上市时间短，临床数据积累中
             // ══════════════════════════════════════════════════════════════
 
-            // ── Fentanyl — Induction ───────────────────────────────────────
-            // Ref: Miller's / Janssen PI
-            // Dose: 1–2 μg/kg TBW; elderly (≥65 y) halve the dose
             DosageRule(
-                drug:                 AnesthesiaDrug.fentanyl.name,
-                doseType:             DoseType.induction.rawValue,
-                minMultiplier:        1.0,
-                maxMultiplier:        2.0,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,               // 50 μg/mL
-                absoluteMaxDose:      200.0,               // mcg safety cap
-                ageAdjustments:       [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
-                doseInterval:         .bolus
+                drug: "环泊酚", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.3, maxMultiplier: 0.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 2.5,
+                absoluteMaxDose: 50.0,
+                doseInterval: .bolus,
+                note: "参考丙泊酚等效剂量 1/4~1/5; 注射痛少，低血压发生率较低"
+            ),
+            DosageRule(
+                drug: "环泊酚", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.4, maxMultiplier: 2.4, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 2.5,
+                doseInterval: .perHour,
+                note: "起始 0.8 mg/kg/h，范围 0.4~2.4 mg/kg/h"
             ),
 
             // ══════════════════════════════════════════════════════════════
-            // 瑞芬太尼 (Remifentanil)
+            // 右美托咪定 (Dexmedetomidine) — 镇静催眠药
+            // Ref: Precedex PI / ESAIC 指南 / CSA TIVA 指南 2024
             // ══════════════════════════════════════════════════════════════
 
-            // ── Remifentanil — Induction ───────────────────────────────────
-            // Ref: Miller's / GlaxoSmithKline PI (Ultiva®)
-            // Dose: 1–2 μg/kg TBW over 60–90 s; titrate to ablate
-            // laryngoscopy response
             DosageRule(
-                drug:                 AnesthesiaDrug.remifentanil.name,
-                doseType:             DoseType.induction.rawValue,
-                minMultiplier:        1.0,
-                maxMultiplier:        2.0,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,               // 50 μg/mL standard
-                absoluteMaxDose:      200.0,
-                ageAdjustments:       [],
-                doseInterval:         .bolus
+                drug: "右美托咪定", doseType: DoseType.sedation.rawValue,
+                minMultiplier: 0.5, maxMultiplier: 1.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.1,
+                doseInterval: .bolus,
+                note: "负荷量 iv >10 min; 可减少镇静药 1/3~1/2，减少阿片药 20~30%"
+            ),
+            DosageRule(
+                drug: "右美托咪定", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.2, maxMultiplier: 0.7, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.1,
+                doseInterval: .perHour,
+                note: "⚠️ 单位 mcg/kg/h 非 mcg/kg/min; α₂激动剂，不保证意识消失"
             ),
 
-            // ── Remifentanil — Maintenance infusion ───────────────────────
-            // Ref: Ultiva® SmPC / Miller's TCI
-            // Rate: 0.1–0.5 μg/kg/min TBW; titrate to surgical stimulus
+            // ══════════════════════════════════════════════════════════════
+            // 咪达唑仑 (Midazolam) — 镇静催眠药
+            // Ref: Miller 9th Ed., Ch.30 / CSA TIVA 指南 2024
+            // ══════════════════════════════════════════════════════════════
+
             DosageRule(
-                drug:                 AnesthesiaDrug.remifentanil.name,
-                doseType:             DoseType.maintenance.rawValue,
-                minMultiplier:        0.1,
-                maxMultiplier:        0.5,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .perMinute
+                drug: "咪达唑仑", doseType: DoseType.sedation.rawValue,
+                minMultiplier: 0.02, maxMultiplier: 0.05, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 1.0,
+                absoluteMaxDose: 5.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
+                doseInterval: .bolus,
+                note: "可能增加老年患者术后谵妄风险; 不推荐持续输注"
             ),
 
-            // ── Remifentanil — Analgesia infusion ─────────────────────────
-            // Ref: Ultiva® SmPC / ICU analgesia protocols
-            // Rate: 0.05–0.2 μg/kg/min TBW; lower range for post-op / ICU
+            // ══════════════════════════════════════════════════════════════
+            // 舒芬太尼 (Sufentanil) — 阿片类镇痛药
+            // Ref: CSA TIVA 指南 2024 / Miller 9th Ed., Ch.31
+            // ══════════════════════════════════════════════════════════════
+
             DosageRule(
-                drug:                 AnesthesiaDrug.remifentanil.name,
-                doseType:             DoseType.analgesia.rawValue,
-                minMultiplier:        0.05,
-                maxMultiplier:        0.2,
-                weightBase:           .totalBodyWeight,
-                unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,
-                absoluteMaxDose:      nil,
-                ageAdjustments:       [],
-                doseInterval:         .perMinute
+                drug: "舒芬太尼", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.3, maxMultiplier: 0.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                absoluteMaxDose: 50.0,
+                doseInterval: .bolus,
+                note: "TCI 血浆靶浓度 0.6 ng/ml 有效抑制插管反应"
+            ),
+            DosageRule(
+                drug: "舒芬太尼", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.25, maxMultiplier: 1.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                doseInterval: .perHour,
+                note: "TCI 0.3 ng/ml; 时-量相关半衰期 33.9 min (输注4h后)"
+            ),
+            DosageRule(
+                drug: "舒芬太尼", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.1, maxMultiplier: 0.3, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                doseInterval: .bolus,
+                note: "术后镇痛间断推注"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 阿芬太尼 (Alfentanil) — 阿片类镇痛药
+            // Ref: CSA TIVA 指南 2024 / Miller 9th Ed., Ch.31
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "阿芬太尼", doseType: DoseType.induction.rawValue,
+                minMultiplier: 25, maxMultiplier: 50, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.5,
+                doseInterval: .bolus,
+                note: "TCI 血浆靶浓度 100~150 ng/ml; 起效快于芬太尼"
+            ),
+            DosageRule(
+                drug: "阿芬太尼", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 30, maxMultiplier: 75, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.5,
+                doseInterval: .perHour,
+                note: "前30min 50~75 μg/kg/h，后 30~42.5 μg/kg/h; 时-量半衰期 58.2 min"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 吗啡 (Morphine) — 阿片类镇痛药
+            // Ref: Miller 9th Ed., Ch.31 / WHO 镇痛阶梯
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "吗啡", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.05, maxMultiplier: 0.2, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                absoluteMaxDose: 15.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
+                doseInterval: .bolus,
+                note: "使用 IBW (肥胖患者避免过量); 呼吸抑制风险显著"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 羟考酮 (Oxycodone) — 阿片类镇痛药
+            // Ref: ESAIC 指南 / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "羟考酮", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.05, maxMultiplier: 0.15, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                absoluteMaxDose: 10.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
+                doseInterval: .bolus,
+                note: "使用 IBW; 口服等效比: 羟考酮≈1.5×吗啡"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 芬太尼 (Fentanyl) — 阿片类镇痛药
+            // Ref: Miller 9th Ed. / CSA TIVA 指南 2024
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "芬太尼", doseType: DoseType.induction.rawValue,
+                minMultiplier: 1.0, maxMultiplier: 3.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                absoluteMaxDose: 200.0,
+                ageAdjustments: [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
+                doseInterval: .bolus,
+                note: "不推荐持续输注(时-量半衰期 262.5 min); 推荐间断给药"
+            ),
+            DosageRule(
+                drug: "芬太尼", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.5, maxMultiplier: 1.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                doseInterval: .bolus
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 瑞芬太尼 (Remifentanil) — 阿片类镇痛药
+            // Ref: Ultiva PI / CSA TIVA 指南 2024
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "瑞芬太尼", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.5, maxMultiplier: 1.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                absoluteMaxDose: 100.0,
+                doseInterval: .bolus,
+                note: "iv 30~60s; 复合丙泊酚时可减量"
+            ),
+            DosageRule(
+                drug: "瑞芬太尼", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.1, maxMultiplier: 0.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                doseInterval: .perMinute,
+                note: "TCI 2~4 ng/ml; CSHT 3~5 min 无蓄积; 停药前需衔接术后镇痛"
+            ),
+            DosageRule(
+                drug: "瑞芬太尼", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.05, maxMultiplier: 0.2, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.05,
+                doseInterval: .perMinute,
+                note: "术后/ICU 0.05~0.2 μg/kg/min; 唤醒麻醉降至 0.01~0.025"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 罗库溴铵 (Rocuronium) — 神经肌肉阻滞药
+            // Ref: ESAIC 指南 / Esmeron SmPC
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "罗库溴铵", doseType: DoseType.intubation.rawValue,
+                minMultiplier: 0.6, maxMultiplier: 1.2, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                absoluteMaxDose: 120.0,
+                doseInterval: .bolus,
+                note: "标准插管 0.6 mg/kg IBW; RSI 1.2 mg/kg~60s 起效; 肥胖用 IBW"
+            ),
+            DosageRule(
+                drug: "罗库溴铵", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 4, maxMultiplier: 16, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .perMinute,
+                note: "9~12 μg/kg/min IBW; 吸入麻醉药增强肌松效应→减量30~50%"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 顺式阿曲库铵 (Cisatracurium) — 神经肌肉阻滞药
+            // Ref: ESAIC 指南 / Miller 9th Ed. / CSA TIVA 指南 2024
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "顺式阿曲库铵", doseType: DoseType.intubation.rawValue,
+                minMultiplier: 0.15, maxMultiplier: 0.2, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 2.0,
+                absoluteMaxDose: 20.0,
+                doseInterval: .bolus,
+                note: "使用 IBW (肥胖患者); Hofmann 消除不依赖肝肾"
+            ),
+            DosageRule(
+                drug: "顺式阿曲库铵", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 1, maxMultiplier: 2, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 2.0,
+                doseInterval: .perMinute,
+                note: "1~2 μg/kg/min IBW; TOF 监测引导"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 米库氯铵 (Mivacurium) — 神经肌肉阻滞药
+            // Ref: Miller 9th Ed. / FDA PI
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "米库氯铵", doseType: DoseType.intubation.rawValue,
+                minMultiplier: 0.15, maxMultiplier: 0.25, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 2.0,
+                doseInterval: .bolus,
+                note: "血浆假性胆碱酯酶水解; 临床时效 15~20 min (短效)"
+            ),
+            DosageRule(
+                drug: "米库氯铵", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 5, maxMultiplier: 15, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 2.0,
+                doseInterval: .perMinute,
+                note: "持续输注 5~15 μg/kg/min; 无蓄积"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 舒更葡萄糖钠 (Sugammadex) — 特异性肌松拮抗剂
+            // Ref: ESAIC 指南 / Bridion SmPC
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "舒更葡萄糖钠", doseType: DoseType.antagonism.rawValue,
+                minMultiplier: 2.0, maxMultiplier: 2.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 100.0,
+                doseInterval: .bolus,
+                note: "中度肌松逆转 (T2重现): 2 mg/kg 实际体重"
+            ),
+            DosageRule(
+                drug: "舒更葡萄糖钠", doseType: DoseType.sedation.rawValue,
+                minMultiplier: 4.0, maxMultiplier: 4.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 100.0,
+                doseInterval: .bolus,
+                note: "深度肌松逆转 (PTC 1~2, 无 TOF): 4 mg/kg (doseType 复用 sedation 存储)"
+            ),
+            DosageRule(
+                drug: "舒更葡萄糖钠", doseType: DoseType.induction.rawValue,
+                minMultiplier: 16.0, maxMultiplier: 16.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 100.0,
+                doseInterval: .bolus,
+                note: "紧急逆转 (罗库溴铵 1.2 mg/kg 后3min): 16 mg/kg (doseType 复用 induction 存储)"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 氟马西尼 (Flumazenil) — 特异性拮抗剂
+            // Ref: Romazicon PI (FDA) / StatPearls 2024
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "氟马西尼", doseType: DoseType.antagonism.rawValue,
+                minMultiplier: 0.003, maxMultiplier: 0.003, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 0.1,
+                absoluteMaxDose: 1.0,
+                doseInterval: .bolus,
+                note: "~0.2 mg/70kg; q1min 重复至 max 1 mg; 癫痫风险(长期BZD使用者)"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 纳美芬 (Nalmefene) — 特异性拮抗剂
+            // Ref: Opvee/Zurnai PI (FDA 2023/2024)
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "纳美芬", doseType: DoseType.antagonism.rawValue,
+                minMultiplier: 0.1, maxMultiplier: 0.25, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 0.1,
+                absoluteMaxDose: 1.0,
+                doseInterval: .bolus,
+                note: "术后阿片逆转 0.25 μg/kg q2~5min; max 1 μg/kg; t₁/₂ 11h 长效"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 去甲肾上腺素 (Norepinephrine) — 血管活性药
+            // Ref: α₁激动剂围术期应用专家共识 2017 / SCCM 指南
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "去甲肾上腺素", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.02, maxMultiplier: 0.1, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 2.0,
+                doseInterval: .perMinute,
+                note: "强效 α₁ + 中等 β₁; 心率偏慢时优选; 配制: kg×0.03mg→50mL → 1mL/h=0.01μg/kg/min"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 肾上腺素 (Epinephrine) — 血管活性药
+            // Ref: ACLS 指南 2023 / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "肾上腺素", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.01, maxMultiplier: 0.15, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 1.0,
+                doseInterval: .perMinute,
+                note: "低剂量 β 为主; 中高剂量 α 为主; >0.1 μg/kg/min α 占优"
+            ),
+            DosageRule(
+                drug: "肾上腺素", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.05, maxMultiplier: 1.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 1.0,
+                doseInterval: .bolus,
+                note: "低血压推注 5~100 μg; 心脏骤停 0.5~1 mg (doseType 复用 induction)"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 多巴胺 (Dopamine) — 血管活性药
+            // Ref: Miller 9th Ed. / SCCM 指南
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "多巴胺", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 2, maxMultiplier: 20, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .perMinute,
+                note: "2~10 β为主 (正性肌力); 10~20 α为主 (升压); <2 D₁ 受体 (肾剂量)"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 麻黄碱 (Ephedrine) — 血管活性药
+            // Ref: α₁激动剂专家共识 2017 / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "麻黄碱", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.07, maxMultiplier: 0.15, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 3.0,
+                absoluteMaxDose: 25.0,
+                doseInterval: .bolus,
+                note: "≈5~10 mg/70kg; α+β 间接激动; 反复使用快速耐受; 不推荐持续输注 (doseType 复用 induction)"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 艾司洛尔 (Esmolol) — 心血管药物
+            // Ref: Brevibloc PI (FDA) / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "艾司洛尔", doseType: DoseType.induction.rawValue,
+                minMultiplier: 0.5, maxMultiplier: 1.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .bolus,
+                note: "iv >60s; 可减少丙泊酚诱导剂量约18.5% (doseType 复用 induction)"
+            ),
+            DosageRule(
+                drug: "艾司洛尔", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 50, maxMultiplier: 300, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 10.0,
+                doseInterval: .perMinute,
+                note: "超短效 β₁ 阻滞剂; t₁/₂ 9 min; 术中降压 150~300 μg/kg/min"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 硝酸甘油 (Nitroglycerin) — 心血管药物
+            // Ref: FDA PI / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "硝酸甘油", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 0.3, maxMultiplier: 5.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mcg.rawValue, concentrationMgPerMl: 5.0,
+                doseInterval: .perMinute,
+                note: "静脉扩张为主; 起始 0.25~0.5 μg/kg/min; >24h 连续输注可产生耐受"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 艾司氯胺酮 (Esketamine) — 抢救用药
+            // Ref: CSA TIVA 指南 2024 / Miller 9th Ed.
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "艾司氯胺酮", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 0.1, maxMultiplier: 0.5, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 25.0,
+                doseInterval: .bolus,
+                note: "亚麻醉剂量 0.1~0.5 mg/kg; 兼具镇痛+交感兴奋; 对呼吸影响轻"
+            ),
+            DosageRule(
+                drug: "艾司氯胺酮", doseType: DoseType.induction.rawValue,
+                minMultiplier: 1.0, maxMultiplier: 2.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 25.0,
+                absoluteMaxDose: 150.0,
+                doseInterval: .bolus,
+                note: "全麻诱导可至 1~2 mg/kg; 支气管扩张; 注意精神症状"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 罗哌卡因 (Ropivacaine) — 局部麻醉药
+            // Ref: ASRA 指南 / Miller 9th Ed. / FDA PI
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "罗哌卡因", doseType: DoseType.analgesia.rawValue,
+                minMultiplier: 2.0, maxMultiplier: 3.0, weightBase: .idealBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 7.5,
+                absoluteMaxDose: 200.0,
+                doseInterval: .bolus,
+                note: "单次极量 200 mg (或 3 mg/kg IBW); 肥胖用 IBW; 心脏毒性低于布比卡因"
+            ),
+
+            // ══════════════════════════════════════════════════════════════
+            // 氨甲环酸 (Tranexamic Acid) — 抗纤溶止血药
+            // Ref: ESAIC 指南 / WHO 创伤指南 / CRASH-2
+            // ══════════════════════════════════════════════════════════════
+
+            DosageRule(
+                drug: "氨甲环酸", doseType: DoseType.induction.rawValue,
+                minMultiplier: 10.0, maxMultiplier: 15.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 100.0,
+                absoluteMaxDose: 2000.0,
+                doseInterval: .bolus,
+                note: "负荷量 10~15 mg/kg iv >10min (手术预防/创伤); max 2g (doseType 复用 induction)"
+            ),
+            DosageRule(
+                drug: "氨甲环酸", doseType: DoseType.maintenance.rawValue,
+                minMultiplier: 1.0, maxMultiplier: 5.0, weightBase: .totalBodyWeight,
+                unit: DoseUnit.mg.rawValue, concentrationMgPerMl: 100.0,
+                doseInterval: .perHour,
+                note: "维持输注 1~5 mg/kg/h (如心脏手术/骨科大手术)"
             ),
         ]
 

@@ -26,6 +26,12 @@ public struct DrugDoseRange: Equatable {
     public let wasClampedByAbsoluteMax: Bool
     /// Time basis — bolus, per-hour, or per-minute infusion rate
     public let doseInterval: DoseInterval
+    /// Minimum dose-per-kg multiplier from the rule
+    public let minMultiplier: Double
+    /// Maximum dose-per-kg multiplier from the rule
+    public let maxMultiplier: Double
+    /// True when RiskEngine auto-routed the weight basis away from TBW
+    public let wasAutoRouted: Bool
 
     // ── Volume (mL) ───────────────────────────────────────────────────
 
@@ -38,26 +44,74 @@ public struct DrugDoseRange: Equatable {
     public var minVolumeMl: Double { (minDose * toMgFactor) / concentrationMgPerMl }
     public var maxVolumeMl: Double { (maxDose * toMgFactor) / concentrationMgPerMl }
 
-    // ── Formatting ────────────────────────────────────────────────────
+    // ── Formula trace ──────────────────────────────────────────────────
 
-    /// e.g. "105.0 – 175.0 mg"  /  "4.0 – 12.0 mg/h"  /  "0.1 – 0.5 μg/min"
-    public var displayString: String {
+    /// Formula trace for clinical transparency: "70.0 kg × 2.0 mg/kg"
+    public var formulaString: String {
         let displayUnit = unit == "mcg" ? "μg" : unit
         let suffix = displayUnit + doseInterval.displaySuffix
-        if abs(minDose - maxDose) < 1e-9 {
-            return String(format: "%.1f \(suffix)", minDose)
+        if abs(minMultiplier - maxMultiplier) < 1e-9 {
+            return String(format: "%.1f kg × %.1f %@/kg", weightUsed, minMultiplier, suffix)
         }
-        return String(format: "%.1f – %.1f \(suffix)", minDose, maxDose)
+        return String(format: "%.1f kg × (%.1f–%.1f) %@/kg", weightUsed, minMultiplier, maxMultiplier, suffix)
     }
 
-    /// e.g. "10.50 – 17.50 mL"  /  "0.40 – 1.20 mL/h"
-    public var volumeString: String {
-        let suffix = "mL" + doseInterval.displaySuffix
-        if abs(minVolumeMl - maxVolumeMl) < 1e-9 {
-            return String(format: "%.2f \(suffix)", minVolumeMl)
+    // ── Infusion rate matrix ────────────────────────────────────────────
+
+    /// Three-tier infusion pump rate reference (0.8× / 1.0× / 1.2× midpoint).
+    /// Returns `nil` for bolus drugs.
+    public var infusionMatrix: [(doseRate: Double, rateMl: Double)]? {
+        guard doseInterval != .bolus else { return nil }
+        let midMultiplier = (minMultiplier + maxMultiplier) / 2.0
+        let toMg = DoseUnit(rawValue: unit)?.toMgFactor ?? 1.0
+        return [0.8, 1.0, 1.2].map { ratio in
+            let dosePerKg = ratio * midMultiplier
+            let totalDoseMg = dosePerKg * weightUsed * toMg
+            let rate = totalDoseMg / concentrationMgPerMl
+            return (dosePerKg, rate)
         }
-        return String(format: "%.2f – %.2f \(suffix)", minVolumeMl, maxVolumeMl)
     }
+
+    /// Compact single-line display: "4.0→28.0 | 8.0→56.0 | 9.6→67.2"
+    public var infusionMatrixString: String? {
+        guard let matrix = infusionMatrix else { return nil }
+        return matrix.map { String(format: "%.1f→%.1f", $0.doseRate, $0.rateMl) }
+            .joined(separator: " | ")
+    }
+
+    // ── Precision-aware formatting ──────────────────────────────────────
+
+    /// Dose display with configurable decimal precision.
+    /// Pediatric mode should use `precision: 2`.
+    public func displayString(precision: Int = 1) -> String {
+        let displayUnit = unit == "mcg" ? "μg" : unit
+        let suffix = displayUnit + doseInterval.displaySuffix
+        let fmt = String(format: "%%.%df", precision)
+        if abs(minDose - maxDose) < 1e-9 {
+            return String(format: "\(fmt) \(suffix)", minDose)
+        }
+        return String(format: "\(fmt) – \(fmt) \(suffix)", minDose, maxDose)
+    }
+
+    /// Volume display with configurable decimal precision.
+    /// Pediatric mode should use `precision: 2` (default).
+    public func volumeString(precision: Int = 2) -> String {
+        let suffix = "mL" + doseInterval.displaySuffix
+        let fmt = String(format: "%%.%df", precision)
+        if abs(minVolumeMl - maxVolumeMl) < 1e-9 {
+            return String(format: "\(fmt) \(suffix)", minVolumeMl)
+        }
+        return String(format: "\(fmt) – \(fmt) \(suffix)", minVolumeMl, maxVolumeMl)
+    }
+
+    // ── Convenience computed properties (backward-compatible) ────────────
+
+    /// Default precision (1 decimal) dose display.
+    /// For pediatric precision, use `displayString(precision: 2)`.
+    public var displayString: String { displayString() }
+
+    /// Default precision (2 decimals) volume display.
+    public var volumeString: String { volumeString() }
 }
 
 // MARK: - Patient
@@ -105,7 +159,7 @@ public struct Patient: Equatable {
     }
 
     // ── Internal bridge ───────────────────────────────────────────────
-    var context: PatientContext {
+    public var context: PatientContext {
         PatientContext(actualWeight: weight, heightCm: height, age: age, sex: sex)
     }
 }
@@ -175,8 +229,9 @@ public final class DrugCalculator {
         }
         guard let rule else { return nil }
 
-        // ── Step 2: Resolve weight basis (TBW / IBW / LBW) ──────────
-        let weight = patient.resolvedWeight(for: rule.weightBase)
+        // ── Step 2: Auto-route weight basis via RiskEngine ──────────
+        let autoWeight = RiskEngine.resolveWeightBase(drugName: drug.name, bmi: patient.bmi)
+        let weight = patient.resolvedWeight(for: autoWeight.effectiveWeightBase)
 
         // ── Step 3: Accumulate age-triggered scaling factors ─────────
         // Multiple adjustments compound multiplicatively (e.g. ×0.7 × ×0.8 = ×0.56).
@@ -203,9 +258,12 @@ public final class DrugCalculator {
             unit:                    rule.unit,
             concentrationMgPerMl:    rule.concentrationMgPerMl,
             weightUsed:              weight,
-            weightBase:              rule.weightBase,
+            weightBase:              autoWeight.effectiveWeightBase,
             wasClampedByAbsoluteMax: clamped,
-            doseInterval:            rule.doseInterval
+            doseInterval:            rule.doseInterval,
+            minMultiplier:           rule.minMultiplier,
+            maxMultiplier:           rule.maxMultiplier,
+            wasAutoRouted:           autoWeight.wasAutoRouted
         )
     }
 
@@ -236,7 +294,8 @@ public final class DrugCalculator {
         }
         guard let rule else { return nil }
 
-        let weight = patient.resolvedWeight(for: rule.weightBase)
+        let autoWeight = RiskEngine.resolveWeightBase(drugName: drug.name, bmi: patient.bmi)
+        let weight = patient.resolvedWeight(for: autoWeight.effectiveWeightBase)
 
         var ageScale = 1.0
         for adjustment in rule.ageAdjustments ?? [] where patient.age >= adjustment.ageThreshold {
@@ -259,9 +318,12 @@ public final class DrugCalculator {
             unit:                    rule.unit,
             concentrationMgPerMl:    rule.concentrationMgPerMl,
             weightUsed:              weight,
-            weightBase:              rule.weightBase,
+            weightBase:              autoWeight.effectiveWeightBase,
             wasClampedByAbsoluteMax: clamped,
-            doseInterval:            rule.doseInterval
+            doseInterval:            rule.doseInterval,
+            minMultiplier:           rule.minMultiplier,
+            maxMultiplier:           rule.maxMultiplier,
+            wasAutoRouted:           autoWeight.wasAutoRouted
         )
     }
 

@@ -10,13 +10,17 @@ import AnesthesiaCalcCore
 /// - HStack 左右分立：左侧药品信息，右侧核心数值
 /// - 纯白底色 + 极轻微弥散阴影，20pt 圆角
 /// - 全部计算委托 Core 层 `DrugCalculator`
+/// - 集成 RiskEngine 风险预警图标 + 公式溯源 + 微量泵矩阵 + 儿科精度
 struct UniversalDrugCardView: View {
 
     let drug: AnesthesiaDrug
     let patient: Patient?
     let calculator: DrugCalculator
+    let isPediatricActive: Bool
 
     @State private var selectedDoseType: String = ""
+    @State private var showRiskPopover: Bool = false
+    @State private var showDeepDive: Bool = false
 
     // MARK: 剂量类型列表
 
@@ -45,22 +49,66 @@ struct UniversalDrugCardView: View {
         return calculator.calculateDose(patient: p, drug: drug, doseTypeString: resolvedDoseType)
     }
 
+    // MARK: 风险评估
+
+    private var riskAssessment: RiskAssessment? {
+        guard let p = patient else { return nil }
+        return RiskEngine.assess(patient: p.context, drugName: drug.name)
+    }
+
     // MARK: Body
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            leftSection
-            Spacer(minLength: 8)
-            rightSection
+        VStack(spacing: 4) {
+            HStack(alignment: .center, spacing: 12) {
+                leftSection
+                Spacer(minLength: 8)
+                rightSection
+            }
+
+            // 底部信息行：公式溯源 (左) + 微量泵矩阵 (右)
+            if let formula = doseRange?.formulaString {
+                HStack(spacing: 4) {
+                    Text(formula)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer(minLength: 4)
+                    if let matrix = doseRange?.infusionMatrixString {
+                        Text(matrix)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(-1)
+                    }
+                }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        .onTapGesture {
+            if riskAssessment?.hasWarnings == true {
+                showRiskPopover = true
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            let impact = UIImpactFeedbackGenerator(style: .medium)
+            impact.impactOccurred()
+            showDeepDive = true
+        }
+        .popover(isPresented: $showRiskPopover, arrowEdge: .top) {
+            riskPopoverContent
+                .presentationCompactAdaptation(.popover)
+        }
+        .sheet(isPresented: $showDeepDive) {
+            DrugDeepDiveView(drug: drug)
+                .presentationDetents([.medium, .large])
+        }
     }
 
-    // MARK: Left — 药品名+Tag（并排）+ 浓度（layoutPriority 防截断）
+    // MARK: Left — 药品名 + 风险图标 + Tag（并排）+ 浓度
 
     private var leftSection: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -69,6 +117,7 @@ struct UniversalDrugCardView: View {
                     .font(.headline)
                     .foregroundColor(.primary)
                     .lineLimit(1)
+                riskIcon
                 doseTypeTag
             }
             Text(concentrationLabel)
@@ -88,10 +137,24 @@ struct UniversalDrugCardView: View {
 
     private var concentrationLabel: String {
         let c = drug.defaultConcentration
+        if c == 0 {
+            return drug.concentrationUnit
+        }
         if c < 1 {
             return String(format: "%g μg/mL", c * 1000)
         }
         return String(format: "%g mg/mL", c)
+    }
+
+    // MARK: 风险图标
+
+    @ViewBuilder
+    private var riskIcon: some View {
+        if riskAssessment?.hasWarnings == true {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundColor(.yellow)
+        }
     }
 
     // MARK: Tag
@@ -143,18 +206,26 @@ struct UniversalDrugCardView: View {
     private var rightSection: some View {
         if let r = doseRange {
             VStack(alignment: .trailing, spacing: 2) {
-                Text(r.volumeString)
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                Text(r.volumeString(precision: isPediatricActive ? 2 : 2))
+                    .font(.system(size: isPediatricActive ? 24 : 22, weight: .semibold, design: .rounded))
                     .foregroundColor(.accentColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.4)
 
-                Text("\(r.displayString)  ·  \(weightBasisLabel(r.weightBase)) \(String(format: "%.1f", r.weightUsed)) kg")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .multilineTextAlignment(.trailing)
+                HStack(spacing: 2) {
+                    Text("\(r.displayString(precision: isPediatricActive ? 2 : 1))  ·  ")
+                    if r.wasAutoRouted {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 8))
+                        Text("\(weightBasisLabel(r.weightBase)) \(String(format: "%.1f", r.weightUsed)) kg")
+                    } else {
+                        Text("\(weightBasisLabel(r.weightBase)) \(String(format: "%.1f", r.weightUsed)) kg")
+                    }
+                }
+                .font(.system(size: 10))
+                .foregroundColor(r.wasAutoRouted ? .blue : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             }
         } else {
             VStack(alignment: .trailing, spacing: 4) {
@@ -166,6 +237,27 @@ struct UniversalDrugCardView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    // MARK: 风险 Popover 内容
+
+    private var riskPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("风险提示")
+                .font(.headline)
+            if let warnings = riskAssessment?.warnings {
+                ForEach(warnings) { warning in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundColor(.yellow)
+                        Text(warning.message)
+                            .font(.callout)
+                    }
+                }
+            }
+        }
+        .padding()
     }
 
     // MARK: Helpers (纯枚举映射，零数学)

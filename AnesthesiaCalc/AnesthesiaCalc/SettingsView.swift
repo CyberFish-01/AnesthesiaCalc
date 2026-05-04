@@ -55,6 +55,7 @@ struct SettingsView: View {
 struct DrugConcentrationSettingsView: View {
 
     @ObservedObject private var drugManager = DrugManager.shared
+    @Environment(\.editMode) private var editMode
     @State private var showAIDrugSheet    = false
     @State private var showManualDrugSheet = false
 
@@ -62,11 +63,12 @@ struct DrugConcentrationSettingsView: View {
         Form {
             drugListSection
             addDrugSection
+                .disabled(editMode?.wrappedValue.isEditing == true)
         }
         .navigationTitle("药物浓度与清单设置")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 EditButton()
             }
         }
@@ -78,24 +80,69 @@ struct DrugConcentrationSettingsView: View {
         }
     }
 
-    // ── Drug list ──────────────────────────────────────────────────────
+    // ── Drug list — split into active / hidden sections ─────────────────
+
+    private var activeDrugIDs: [UUID] {
+        drugManager.allDrugs.lazy.filter(\.isActive).map(\.id)
+    }
+
+    private var hiddenDrugIDs: [UUID] {
+        drugManager.allDrugs.lazy.filter { !$0.isActive }.map(\.id)
+    }
+
+    private func binding(for drugID: UUID) -> Binding<AnesthesiaDrug> {
+        Binding(
+            get: { drugManager.allDrugs.first(where: { $0.id == drugID }) ?? drugManager.allDrugs[0] },
+            set: { newValue in
+                if let idx = drugManager.allDrugs.firstIndex(where: { $0.id == drugID }) {
+                    drugManager.allDrugs[idx] = newValue
+                }
+            }
+        )
+    }
 
     private var drugListSection: some View {
-        Section {
-            ForEach($drugManager.activeDrugs) { $drug in
-                DrugDisclosureRow(drug: $drug)
+        Group {
+            if !activeDrugIDs.isEmpty {
+                Section {
+                    ForEach(activeDrugIDs, id: \.self) { drugID in
+                        DrugDisclosureRow(
+                            drug: binding(for: drugID),
+                            onToggle: { drugManager.toggleActive(drugID) }
+                        )
+                        .id(drugID)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { activeDrugIDs[$0] }
+                        drugManager.deleteDrugs(Set(ids))
+                    }
+                } header: {
+                    Text("已启用药物 (\(activeDrugIDs.count))")
+                }
+                .transition(.opacity)
             }
-            .onDelete { indices in
-                drugManager.activeDrugs.remove(atOffsets: indices)
+
+            if !hiddenDrugIDs.isEmpty {
+                Section {
+                    ForEach(hiddenDrugIDs, id: \.self) { drugID in
+                        DrugDisclosureRow(
+                            drug: binding(for: drugID),
+                            onToggle: { drugManager.toggleActive(drugID) }
+                        )
+                        .id(drugID)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { hiddenDrugIDs[$0] }
+                        drugManager.deleteDrugs(Set(ids))
+                    }
+                } header: {
+                    Text("已隐藏药物 (\(hiddenDrugIDs.count))")
+                }
+                .transition(.opacity)
             }
-            .onMove { from, to in
-                drugManager.activeDrugs.move(fromOffsets: from, toOffset: to)
-            }
-        } header: {
-            Text("已启用药物")
-        } footer: {
-            Text("修改浓度后，主页抽取量将实时更新。左滑可删除，长按可拖动排序。")
         }
+        .animation(.default, value: activeDrugIDs)
+        .animation(.default, value: hiddenDrugIDs)
     }
 
     // ── Add drug — dual-track menu ─────────────────────────────────────
@@ -130,10 +177,13 @@ struct DrugConcentrationSettingsView: View {
 private struct DrugDisclosureRow: View {
 
     @Binding var drug: AnesthesiaDrug
+    var onToggle: (() -> Void)?
+    @Environment(\.editMode) private var editMode
 
     // String-backed concentration field avoids the SwiftUI Form quirk where
     // TextField(value:format:) gets extracted as a separate list row.
     @State private var concText: String = ""
+    @State private var isExpanded = false
 
     /// Rules to display based on the current active source.
     private var displayedRules: [DosageRule] {
@@ -144,9 +194,51 @@ private struct DrugDisclosureRow: View {
     }
 
     var body: some View {
-        DisclosureGroup {
+        if editMode?.wrappedValue.isEditing == true {
+            editModeRow
+        } else {
+            normalRow
+        }
+    }
 
-            // ── Rule-source switch ───────────────────────────────────────
+    // ── Edit mode: flat row, no expansion, Toggle still interactive ──────
+
+    private var editModeRow: some View {
+        HStack(spacing: 8) {
+            Label(drug.name, systemImage: "pills.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(drug.isActive ? .primary : .secondary)
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { drug.isActive },
+                set: { _ in onToggle?() }
+            ))
+            .labelsHidden()
+            .scaleEffect(0.85)
+            .fixedSize()
+        }
+        .contentShape(Rectangle())
+        .allowsHitTesting(true)
+    }
+
+    // ── Normal mode: DisclosureGroup + separate Toggle ───────────────────
+
+    private var normalRow: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            disclosureContent
+        } label: {
+            Label(drug.name, systemImage: "pills.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(drug.isActive ? .primary : .secondary)
+        }
+        .disabled(!drug.isActive)
+    }
+
+    // ── Shared detail content ────────────────────────────────────────────
+
+    private var disclosureContent: some View {
+        Group {
+            // Rule-source switch
             Picker("规则来源", selection: $drug.activeRuleSource) {
                 Text("AI 规则").tag(RuleSource.ai)
                 Text("手动规则").tag(RuleSource.manual)
@@ -154,7 +246,7 @@ private struct DrugDisclosureRow: View {
             .pickerStyle(.segmented)
             .padding(.vertical, 4)
 
-            // ── Concentration ────────────────────────────────────────────
+            // Concentration
             HStack(spacing: 10) {
                 Image(systemName: "drop.circle")
                     .foregroundStyle(Color.accentColor)
@@ -163,30 +255,36 @@ private struct DrugDisclosureRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
-                TextField("浓度", text: $concText)
-                    .multilineTextAlignment(.trailing)
-                    .keyboardType(.decimalPad)
-                    .font(.subheadline.weight(.medium))
-                    .frame(width: 72)
-                    .onAppear {
-                        let v = drug.defaultConcentration
-                        concText = v.truncatingRemainder(dividingBy: 1) == 0
-                            ? String(format: "%.0f", v)
-                            : String(format: "%g", v)
-                    }
-                    .onChange(of: concText) { _, s in
-                        let normalized = s.replacingOccurrences(of: ",", with: ".")
-                        if let d = Double(normalized), d > 0 {
-                            drug.defaultConcentration = d
+                if drug.defaultConcentration == 0 {
+                    Text(drug.concentrationUnit)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    TextField("浓度", text: $concText)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .font(.subheadline.weight(.medium))
+                        .frame(width: 72)
+                        .onAppear {
+                            let v = drug.defaultConcentration
+                            concText = v.truncatingRemainder(dividingBy: 1) == 0
+                                ? String(format: "%.0f", v)
+                                : String(format: "%g", v)
                         }
-                    }
-                Text(drug.concentrationUnit)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                        .onChange(of: concText) { _, s in
+                            let normalized = s.replacingOccurrences(of: ",", with: ".")
+                            if let d = Double(normalized), d > 0 {
+                                drug.defaultConcentration = d
+                            }
+                        }
+                    Text(drug.concentrationUnit)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.vertical, 4)
 
-            // ── Rule list ────────────────────────────────────────────────
+            // Rule list
             if displayedRules.isEmpty {
                 Label(
                     drug.activeRuleSource == .ai
@@ -206,10 +304,6 @@ private struct DrugDisclosureRow: View {
                     AIRuleRow(rule: rule)
                 }
             }
-
-        } label: {
-            Label(drug.name, systemImage: "pills.fill")
-                .font(.subheadline.weight(.medium))
         }
     }
 }
@@ -399,7 +493,7 @@ struct ManualDrugAddView: View {
             var r = $0; r.drug = trimmedName; return r
         }
 
-        drugManager.activeDrugs.append(drug)
+        drugManager.allDrugs.append(drug)
         dismiss()
     }
 }
@@ -756,7 +850,7 @@ private struct AddDrugPlaceholderView: View {
                                 // Embed rules into drug.aiRules (dual-track)
                                 drug.aiRules = rules
                                 await MainActor.run {
-                                    drugManager.activeDrugs.append(drug)
+                                    drugManager.allDrugs.append(drug)
                                     AIRuleEngine.shared.replaceAllRules(
                                         with: AIRuleEngine.shared.allRules + rules
                                     )

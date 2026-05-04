@@ -35,6 +35,10 @@ public struct AnesthesiaDrug: Identifiable, Codable {
     /// Rules entered manually by the clinician.
     public var manualRules: [DosageRule]
 
+    /// When `false`, the drug is hidden from the main calculator view but retained
+    /// in the database. Persisted alongside other drug properties.
+    public var isActive: Bool
+
     /// Controls which rule set drives the main-screen calculator.
     public var activeRuleSource: RuleSource
 
@@ -53,7 +57,8 @@ public struct AnesthesiaDrug: Identifiable, Codable {
         concentrationUnit: String,
         aiRules: [DosageRule] = [],
         manualRules: [DosageRule] = [],
-        activeRuleSource: RuleSource = .ai
+        activeRuleSource: RuleSource = .ai,
+        isActive: Bool = true
     ) {
         self.id                   = id
         self.name                 = name
@@ -62,6 +67,7 @@ public struct AnesthesiaDrug: Identifiable, Codable {
         self.aiRules              = aiRules
         self.manualRules          = manualRules
         self.activeRuleSource     = activeRuleSource
+        self.isActive             = isActive
     }
 
     /// Full display name — currently identical to `name`.
@@ -83,6 +89,7 @@ public struct AnesthesiaDrug: Identifiable, Codable {
         case aiRules
         case manualRules
         case activeRuleSource
+        case isActive
     }
 
     /// Fallback keys — snake_case variants used when the AI returns snake_case
@@ -93,6 +100,7 @@ public struct AnesthesiaDrug: Identifiable, Codable {
         case aiRules              = "ai_rules"
         case manualRules          = "manual_rules"
         case activeRuleSource     = "active_rule_source"
+        case isActive             = "is_active"
     }
 
     public init(from decoder: Decoder) throws {
@@ -132,6 +140,10 @@ public struct AnesthesiaDrug: Identifiable, Codable {
         activeRuleSource = try c.decodeIfPresent(RuleSource.self, forKey: .activeRuleSource)
             ?? (try cs.decodeIfPresent(RuleSource.self, forKey: .activeRuleSource))
             ?? .ai
+
+        isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive)
+            ?? (try cs.decodeIfPresent(Bool.self, forKey: .isActive))
+            ?? true  // legacy data without the field defaults to active
     }
 }
 
