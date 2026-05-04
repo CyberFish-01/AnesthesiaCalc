@@ -86,8 +86,8 @@ struct UniversalDrugCardView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color(.separator), lineWidth: 0.5))
         .onTapGesture {
             if riskAssessment?.hasWarnings == true {
                 showRiskPopover = true

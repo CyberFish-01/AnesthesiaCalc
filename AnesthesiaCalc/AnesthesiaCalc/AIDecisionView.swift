@@ -68,6 +68,11 @@ struct AIDecisionView: View {
                         }
                         .accessibilityLabel("历史病例")
                     }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("完成") { isFreeTextFocused = false }
+                            .font(.body.bold())
+                    }
                 }
                 .alert("查询失败", isPresented: $showError, presenting: errorMessage) { _ in
                     Button("好的", role: .cancel) {}

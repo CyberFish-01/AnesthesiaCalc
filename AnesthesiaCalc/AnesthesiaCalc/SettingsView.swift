@@ -611,6 +611,7 @@ private struct PromptEditorRow: View {
     let defaultText: String
 
     @State private var isExpanded = false
+    @FocusState private var isEditorFocused: Bool
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -618,6 +619,7 @@ private struct PromptEditorRow: View {
                 TextEditor(text: $text)
                     .font(.footnote.monospaced())
                     .frame(minHeight: 180)
+                    .focused($isEditorFocused)
                     .scrollContentBackground(.hidden)
                     .background(Color(UIColor.tertiarySystemGroupedBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -640,6 +642,13 @@ private struct PromptEditorRow: View {
                 }
             }
             .padding(.vertical, 6)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { isEditorFocused = false }
+                        .font(.body.bold())
+                }
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon)

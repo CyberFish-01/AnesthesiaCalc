@@ -4,7 +4,7 @@
       "filename" : "AppIcon-Light.png",
       "idiom" : "universal",
       "platform" : "ios",
-      "size" : "1024x1024"
+      "size" : "3200x3200"
     },
     {
       "appearances" : [
@@ -16,7 +16,7 @@
       "filename" : "AppIcon-Dark.png",
       "idiom" : "universal",
       "platform" : "ios",
-      "size" : "1024x1024"
+      "size" : "3200x3200"
     }
   ],
   "info" : {

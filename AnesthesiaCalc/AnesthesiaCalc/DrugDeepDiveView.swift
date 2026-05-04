@@ -78,8 +78,8 @@ struct DrugDeepDiveView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color(.separator), lineWidth: 0.5))
     }
 
     // MARK: - Section 2: 临床指南红线
@@ -101,8 +101,8 @@ struct DrugDeepDiveView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color(.separator), lineWidth: 0.5))
     }
 
     // MARK: - Unavailable fallback
