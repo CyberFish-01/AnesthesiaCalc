@@ -72,7 +72,7 @@ public struct DosageRule: Equatable {
     public let unit: String
 
     /// Commercial preparation concentration, always in **mg/mL**
-    /// (e.g. Propofol 1 % = 10 mg/mL; Fentanyl 50 mcg/mL = 0.05 mg/mL)
+    /// (e.g. Propofol 1 % = 10 mg/mL; Fentanyl 50 μg/mL = 0.05 mg/mL)
     /// `var` so post-processing in `AIAssistantService` can back-fill from
     /// `drug.defaultConcentration` when the AI omits this redundant field.
     public var concentrationMgPerMl: Double
@@ -92,6 +92,14 @@ public struct DosageRule: Equatable {
     /// Optional free-text clinical note returned by the AI (e.g. dosing caveats,
     /// monitoring requirements). Ignored by the calculation engine; shown in UI only.
     public let note: String?
+
+    /// True when this rule describes a continuous infusion (per-hour or per-minute)
+    /// rather than a single bolus injection.
+    /// Note: `unit` stores only the mass unit ("mg"/"mcg"); the time basis lives in
+    /// `doseInterval`, so that is the authoritative infusion check.
+    public var isInfusion: Bool {
+        doseInterval == .perHour || doseInterval == .perMinute
+    }
 
     public init(
         drug: String?,
@@ -142,26 +150,83 @@ public struct DosageRule: Equatable {
 
 extension DosageRule: Codable {
 
+    /// Primary keys — camelCase, matching what the system prompt instructs the AI to return.
     private enum CodingKeys: String, CodingKey {
-        case drug, doseType, minMultiplier, maxMultiplier
-        case weightBase, unit, concentrationMgPerMl
-        case absoluteMaxDose, ageAdjustments, doseInterval
+        case drug
+        case doseType
+        case minMultiplier
+        case maxMultiplier
+        case weightBase
+        case unit
+        case concentrationMgPerMl   // camelCase form
+        case absoluteMaxDose
+        case ageAdjustments
+        case doseInterval
         case note
     }
 
+    /// Fallback keys — snake_case variants for models that ignore the camelCase
+    /// instruction in the system prompt (e.g. some open-source LLMs).
+    private enum SnakeCodingKeys: String, CodingKey {
+        case concentrationMgPerMl = "concentration_mg_per_ml"
+        case doseType             = "dose_type"
+        case minMultiplier        = "min_multiplier"
+        case maxMultiplier        = "max_multiplier"
+        case weightBase           = "weight_base"
+        case absoluteMaxDose      = "absolute_max_dose"
+        case ageAdjustments       = "age_adjustments"
+        case doseInterval         = "dose_interval"
+    }
+
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        drug                 = try c.decodeIfPresent(String.self,  forKey: .drug)
-        doseType             = try c.decode(String.self,          forKey: .doseType)
-        minMultiplier        = try c.decode(Double.self,          forKey: .minMultiplier)
-        maxMultiplier        = try c.decodeIfPresent(Double.self, forKey: .maxMultiplier) ?? minMultiplier
-        weightBase           = try c.decode(WeightBase.self,      forKey: .weightBase)
-        unit                 = try c.decode(String.self,          forKey: .unit)
-        concentrationMgPerMl = try c.decodeIfPresent(Double.self, forKey: .concentrationMgPerMl) ?? 0
-        absoluteMaxDose      = try c.decodeIfPresent(Double.self, forKey: .absoluteMaxDose)
-        ageAdjustments       = try c.decodeIfPresent([AgeAdjustment].self, forKey: .ageAdjustments)
-        doseInterval         = try c.decodeIfPresent(DoseInterval.self,   forKey: .doseInterval) ?? .bolus
-        note                 = try c.decodeIfPresent(String.self, forKey: .note)
+        let c  = try decoder.container(keyedBy: CodingKeys.self)
+        let cs = try decoder.container(keyedBy: SnakeCodingKeys.self)
+
+        drug = try c.decodeIfPresent(String.self, forKey: .drug)
+
+        // Required fields: try camelCase first, fall back to snake_case.
+        doseType = try c.decodeIfPresent(String.self, forKey: .doseType)
+            ?? (try cs.decodeIfPresent(String.self, forKey: .doseType))
+            ?? { throw DecodingError.keyNotFound(CodingKeys.doseType,
+                   .init(codingPath: decoder.codingPath,
+                         debugDescription: "Missing 'doseType' or 'dose_type'")) }()
+
+        minMultiplier = try c.decodeIfPresent(Double.self, forKey: .minMultiplier)
+            ?? (try cs.decodeIfPresent(Double.self, forKey: .minMultiplier))
+            ?? { throw DecodingError.keyNotFound(CodingKeys.minMultiplier,
+                   .init(codingPath: decoder.codingPath,
+                         debugDescription: "Missing 'minMultiplier' or 'min_multiplier'")) }()
+
+        maxMultiplier = try c.decodeIfPresent(Double.self, forKey: .maxMultiplier)
+            ?? (try cs.decodeIfPresent(Double.self, forKey: .maxMultiplier))
+            ?? minMultiplier
+
+        weightBase = try c.decodeIfPresent(WeightBase.self, forKey: .weightBase)
+            ?? (try cs.decodeIfPresent(WeightBase.self, forKey: .weightBase))
+            ?? { throw DecodingError.keyNotFound(CodingKeys.weightBase,
+                   .init(codingPath: decoder.codingPath,
+                         debugDescription: "Missing 'weightBase' or 'weight_base'")) }()
+
+        unit = try c.decode(String.self, forKey: .unit)
+
+        // concentrationMgPerMl: try camelCase, then explicit snake_case fallback.
+        // Falls back to 0 (sentinel) so AIAssistantService can back-fill from
+        // drug.defaultConcentration when the AI omits this field.
+        concentrationMgPerMl = try c.decodeIfPresent(Double.self, forKey: .concentrationMgPerMl)
+            ?? (try cs.decodeIfPresent(Double.self, forKey: .concentrationMgPerMl))
+            ?? 0
+
+        absoluteMaxDose = try c.decodeIfPresent(Double.self, forKey: .absoluteMaxDose)
+            ?? (try cs.decodeIfPresent(Double.self, forKey: .absoluteMaxDose))
+
+        ageAdjustments = try c.decodeIfPresent([AgeAdjustment].self, forKey: .ageAdjustments)
+            ?? (try cs.decodeIfPresent([AgeAdjustment].self, forKey: .ageAdjustments))
+
+        doseInterval = try c.decodeIfPresent(DoseInterval.self, forKey: .doseInterval)
+            ?? (try cs.decodeIfPresent(DoseInterval.self, forKey: .doseInterval))
+            ?? .bolus
+
+        note = try c.decodeIfPresent(String.self, forKey: .note)
     }
 }
 
@@ -214,6 +279,7 @@ public final class AIRuleEngine {
     /// - Throws: `DecodingError` if the JSON is malformed.
     public func updateRules(from json: Data) throws {
         let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
         let incoming = try decoder.decode([DosageRule].self, from: json)
         queue.async(flags: .barrier) { [weak self] in
             guard let self else { return }
@@ -359,7 +425,7 @@ public final class AIRuleEngine {
 
             // ── Fentanyl — Induction ───────────────────────────────────────
             // Ref: Miller's / Janssen PI
-            // Dose: 1–2 mcg/kg TBW; elderly (≥65 y) halve the dose
+            // Dose: 1–2 μg/kg TBW; elderly (≥65 y) halve the dose
             DosageRule(
                 drug:                 AnesthesiaDrug.fentanyl.name,
                 doseType:             DoseType.induction.rawValue,
@@ -367,7 +433,7 @@ public final class AIRuleEngine {
                 maxMultiplier:        2.0,
                 weightBase:           .totalBodyWeight,
                 unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,               // 50 mcg/mL
+                concentrationMgPerMl: 0.05,               // 50 μg/mL
                 absoluteMaxDose:      200.0,               // mcg safety cap
                 ageAdjustments:       [AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)],
                 doseInterval:         .bolus
@@ -379,7 +445,7 @@ public final class AIRuleEngine {
 
             // ── Remifentanil — Induction ───────────────────────────────────
             // Ref: Miller's / GlaxoSmithKline PI (Ultiva®)
-            // Dose: 1–2 mcg/kg TBW over 60–90 s; titrate to ablate
+            // Dose: 1–2 μg/kg TBW over 60–90 s; titrate to ablate
             // laryngoscopy response
             DosageRule(
                 drug:                 AnesthesiaDrug.remifentanil.name,
@@ -388,7 +454,7 @@ public final class AIRuleEngine {
                 maxMultiplier:        2.0,
                 weightBase:           .totalBodyWeight,
                 unit:                 DoseUnit.mcg.rawValue,
-                concentrationMgPerMl: 0.05,               // 50 mcg/mL standard
+                concentrationMgPerMl: 0.05,               // 50 μg/mL standard
                 absoluteMaxDose:      200.0,
                 ageAdjustments:       [],
                 doseInterval:         .bolus
@@ -396,7 +462,7 @@ public final class AIRuleEngine {
 
             // ── Remifentanil — Maintenance infusion ───────────────────────
             // Ref: Ultiva® SmPC / Miller's TCI
-            // Rate: 0.1–0.5 mcg/kg/min TBW; titrate to surgical stimulus
+            // Rate: 0.1–0.5 μg/kg/min TBW; titrate to surgical stimulus
             DosageRule(
                 drug:                 AnesthesiaDrug.remifentanil.name,
                 doseType:             DoseType.maintenance.rawValue,
@@ -412,7 +478,7 @@ public final class AIRuleEngine {
 
             // ── Remifentanil — Analgesia infusion ─────────────────────────
             // Ref: Ultiva® SmPC / ICU analgesia protocols
-            // Rate: 0.05–0.2 mcg/kg/min TBW; lower range for post-op / ICU
+            // Rate: 0.05–0.2 μg/kg/min TBW; lower range for post-op / ICU
             DosageRule(
                 drug:                 AnesthesiaDrug.remifentanil.name,
                 doseType:             DoseType.analgesia.rawValue,

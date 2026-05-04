@@ -36,8 +36,13 @@ public enum DoseUnit: String, Codable, CaseIterable {
     case mg   // milligrams — default for most anaesthetic drugs
     case mcg  // micrograms — opioids (fentanyl, remifentanil …)
 
+    /// Display unit for UI: maps "mcg" → "μg" to save horizontal space.
+    public var displayValue: String {
+        self == .mcg ? "μg" : rawValue
+    }
+
     /// Converts a value expressed in this unit into milligrams.
-    /// e.g.  1 mcg × 0.001 = 0.001 mg
+    /// e.g.  1 μg × 0.001 = 0.001 mg
     public var toMgFactor: Double {
         switch self {
         case .mg:  return 1.0
@@ -46,7 +51,7 @@ public enum DoseUnit: String, Codable, CaseIterable {
     }
 
     /// Converts a milligram value back to this display unit.
-    /// e.g.  0.07 mg × 1000 = 70 mcg
+    /// e.g.  0.07 mg × 1000 = 70 μg
     public var fromMgFactor: Double { 1.0 / toMgFactor }
 }
 

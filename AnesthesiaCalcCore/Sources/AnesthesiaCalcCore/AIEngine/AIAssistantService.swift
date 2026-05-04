@@ -163,7 +163,7 @@ public final class AIAssistantService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json",  forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 120
 
         let body = OpenAIChatRequest(
             model: modelName,
@@ -322,7 +322,7 @@ public final class AIAssistantService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json",  forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 45
+        request.timeoutInterval = 120
 
         let rawDecisionPrompt = defaults.string(forKey: "ai_decision_prompt") ?? ""
         let sysDecisionPrompt = rawDecisionPrompt.isEmpty ? Self.decisionSystemPrompt : rawDecisionPrompt
@@ -404,7 +404,7 @@ public final class AIAssistantService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json",  forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 45
+        request.timeoutInterval = 120
 
         let rawQAPrompt = defaults.string(forKey: "ai_qa_prompt") ?? ""
         let sysQAPrompt = rawQAPrompt.isEmpty ? Self.medicalQASystemPrompt : rawQAPrompt
@@ -508,8 +508,8 @@ public final class AIAssistantService {
     1. 你必须且只能返回一段合法的 JSON 字符串。
     2. 不得包含任何 markdown 标记（如 ```json）、解释文字、注释或任何 JSON 结构以外的内容。
     3. JSON 中的所有数值必须是合法的 JSON 数字（不得使用字符串表示数值）。
-    4. "doseType" 的值只能是以下五个之一：induction（全麻诱导）、intubation（气管插管）、\
-    maintenance（麻醉维持）、sedation（镇静）、analgesia（镇痛）。
+    4. 极其重要："doseType" 的值必须且只能从以下纯中文词汇中选择：["诱导", "维持", "插管", "镇痛", "镇静", "拮抗"]。\
+    绝不允许输出任何英文或下划线格式（如 induction、induction_analgesia），否则将导致系统解析崩溃！
     5. "weightBase" 的值只能是：TBW（实际体重）、IBW（理想体重）、LBW（去脂体重）之一。
     6. "unit" 的值只能是：mg 或 mcg。
     7. "doseInterval" 的值只能是：bolus（单次推注）、perHour（每小时输注速率）、perMinute（每分钟输注速率）之一。
@@ -529,7 +529,7 @@ public final class AIAssistantService {
       "rules": [
         {
           "drug": "与 drug.name 完全相同的字符串",
-          "doseType": "上述五个值之一",
+          "doseType": "上述六个中文值之一（诱导/维持/插管/镇痛/镇静/拮抗）",
           "minMultiplier": 最小剂量（每kg体重对应的unit数量，纯数字）,
           "maxMultiplier": 最大剂量（每kg体重对应的unit数量，纯数字）,
           "weightBase": "TBW / IBW / LBW 之一",

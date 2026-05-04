@@ -131,6 +131,10 @@ private struct DrugDisclosureRow: View {
 
     @Binding var drug: AnesthesiaDrug
 
+    // String-backed concentration field avoids the SwiftUI Form quirk where
+    // TextField(value:format:) gets extracted as a separate list row.
+    @State private var concText: String = ""
+
     /// Rules to display based on the current active source.
     private var displayedRules: [DosageRule] {
         switch drug.activeRuleSource {
@@ -159,16 +163,28 @@ private struct DrugDisclosureRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
-                TextField("浓度", value: $drug.defaultConcentration, format: .number)
+                TextField("浓度", text: $concText)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.decimalPad)
                     .font(.subheadline.weight(.medium))
                     .frame(width: 72)
+                    .onAppear {
+                        let v = drug.defaultConcentration
+                        concText = v.truncatingRemainder(dividingBy: 1) == 0
+                            ? String(format: "%.0f", v)
+                            : String(format: "%g", v)
+                    }
+                    .onChange(of: concText) { _, s in
+                        let normalized = s.replacingOccurrences(of: ",", with: ".")
+                        if let d = Double(normalized), d > 0 {
+                            drug.defaultConcentration = d
+                        }
+                    }
                 Text(drug.concentrationUnit)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
 
             // ── Rule list ────────────────────────────────────────────────
             if displayedRules.isEmpty {
@@ -182,12 +198,9 @@ private struct DrugDisclosureRow: View {
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 4)
             } else {
-                Divider().padding(.vertical, 2)
-
                 Text(drug.activeRuleSource == .ai ? "AI 生成规则" : "手动经验规则")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 4)
 
                 ForEach(displayedRules, id: \.doseType) { rule in
                     AIRuleRow(rule: rule)
@@ -299,7 +312,7 @@ struct ManualDrugAddView: View {
                                 .frame(width: 72)
                             Picker("单位", selection: $concUnit) {
                                 Text("mg/mL").tag("mg/mL")
-                                Text("mcg/mL").tag("mcg/mL")
+                                Text("μg/mL").tag("mcg/mL")
                             }
                             .labelsHidden()
                             .fixedSize()
@@ -445,7 +458,7 @@ private struct ManualRuleFormView: View {
                     }
                     Picker("剂量单位", selection: $unit) {
                         Text("mg").tag("mg")
-                        Text("mcg").tag("mcg")
+                        Text("μg").tag("mcg")
                     }
                     Picker("体重基准", selection: $weightBase) {
                         Text("实际体重 (TBW)").tag(WeightBase.totalBodyWeight)
@@ -569,8 +582,8 @@ private let aiDefaultSystemPrompt = """
     1. 你必须且只能返回一段合法的 JSON 字符串。
     2. 不得包含任何 markdown 标记（如 ```json）、解释文字、注释或任何 JSON 结构以外的内容。
     3. JSON 中的所有数值必须是合法的 JSON 数字（不得使用字符串表示数值）。
-    4. "doseType" 的值只能是以下五个之一：induction（全麻诱导）、intubation（气管插管）、\
-    maintenance（麻醉维持）、sedation（镇静）、analgesia（镇痛）。
+    4. 极其重要："doseType" 的值必须且只能从以下纯中文词汇中选择：["诱导", "维持", "插管", "镇痛", "镇静", "拮抗"]。\
+    绝不允许输出任何英文或下划线格式（如 induction、induction_analgesia），否则将导致系统解析崩溃！
     5. "weightBase" 的值只能是：TBW（实际体重）、IBW（理想体重）、LBW（去脂体重）之一。
     6. "unit" 的值只能是：mg 或 mcg。
     7. "doseInterval" 的值只能是：bolus（单次推注）、perHour（每小时输注速率）、perMinute（每分钟输注速率）之一。
@@ -590,7 +603,7 @@ private let aiDefaultSystemPrompt = """
       "rules": [
         {
           "drug": "与 drug.name 完全相同的字符串",
-          "doseType": "上述五个值之一",
+          "doseType": "上述六个中文值之一（诱导/维持/插管/镇痛/镇静/拮抗）",
           "minMultiplier": 最小剂量（每kg体重对应的unit数量，纯数字）,
           "maxMultiplier": 最大剂量（每kg体重对应的unit数量，纯数字）,
           "weightBase": "TBW / IBW / LBW 之一",

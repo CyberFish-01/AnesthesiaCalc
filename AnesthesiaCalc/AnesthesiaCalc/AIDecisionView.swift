@@ -31,6 +31,7 @@ struct AIDecisionView: View {
     // ── Result sheet ──────────────────────────────────────────────────
     @State private var savedRecord: CaseRecord?
     @State private var showResult = false
+    @State private var savedUpsertResult: UpsertResult = .created
 
     // ── History ───────────────────────────────────────────────────────
     @StateObject private var history = HistoryManager.shared
@@ -39,41 +40,50 @@ struct AIDecisionView: View {
     @FocusState private var isFreeTextFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    freeTextCard
-                    structuredFormCard
-                    generateButton
-                }
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 32)
-            }
-            .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle("AI 决策")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: CaseHistoryView()) {
-                        Image(systemName: "clock.fill")
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(Color.accentColor)
+        ZStack {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        freeTextCard
+                        structuredFormCard
+                        generateButton
                     }
-                    .accessibilityLabel("历史病例")
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
                 }
-            }
-            .alert("查询失败", isPresented: $showError, presenting: errorMessage) { _ in
-                Button("好的", role: .cancel) {}
-            } message: { msg in
-                Text(msg)
-            }
+                .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+                .navigationTitle("AI 决策")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        NavigationLink(destination: CaseHistoryView()) {
+                            Image(systemName: "clock.fill")
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .accessibilityLabel("历史病例")
+                    }
+                }
+                .alert("查询失败", isPresented: $showError, presenting: errorMessage) { _ in
+                    Button("好的", role: .cancel) {}
+                } message: { msg in
+                    Text(msg)
+                }
             .sheet(isPresented: $showResult) {
                 if let record = savedRecord {
-                    DecisionResultSheet(record: record)
+                    DecisionResultSheet(record: record, upsertResult: savedUpsertResult)
                 }
             }
+            }
+
+            // ── Premium loading overlay ────────────────────────────────
+            if isLoading {
+                DirectorLoadingView()
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: isLoading)
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -263,10 +273,12 @@ struct AIDecisionView: View {
 
     private func generate() {
         isFreeTextFocused = false
-        isLoading = true
         let combined = buildCombinedInput()
 
-        Task {
+        Task { @MainActor in
+            isLoading = true
+            defer { isLoading = false }
+
             do {
                 let response = try await AIAssistantService.shared.fetchDecisionPlan(
                     combinedInput: combined
@@ -279,18 +291,14 @@ struct AIDecisionView: View {
                     conditions:     response.patient.conditions,
                     anesthesiaPlan: response.plan
                 )
-                await MainActor.run {
-                    history.save(record)
-                    savedRecord = record
-                    isLoading   = false
-                    showResult  = true
-                }
+                savedUpsertResult = history.upsert(record)
+                savedRecord       = record
+                showResult        = true
             } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showError    = true
-                    isLoading    = false
-                }
+                errorMessage = (error as? URLError)?.code == .timedOut
+                    ? "网络开小差了，主任思考被打断，请重试。"
+                    : error.localizedDescription
+                showError = true
             }
         }
     }
@@ -303,12 +311,35 @@ struct AIDecisionView: View {
 private struct DecisionResultSheet: View {
 
     let record: CaseRecord
+    let upsertResult: UpsertResult
     @Environment(\.dismiss) private var dismiss
+
+    private var badgeColor: Color {
+        upsertResult == .updated ? .orange : .teal
+    }
+
+    private var badgeIcon: String {
+        upsertResult == .updated ? "arrow.triangle.2.circlepath.circle.fill" : "plus.circle.fill"
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+
+                    // ── Archive status badge ───────────────────────────
+                    HStack(spacing: 6) {
+                        Image(systemName: badgeIcon)
+                        Text(upsertResult.message)
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(badgeColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(badgeColor.opacity(0.10), in: Capsule())
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+
                     CaseRecordCard(record: record, initiallyExpanded: true)
                         .padding()
                 }

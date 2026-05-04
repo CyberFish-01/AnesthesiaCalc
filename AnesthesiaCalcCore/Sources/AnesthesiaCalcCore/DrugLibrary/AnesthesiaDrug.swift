@@ -74,24 +74,64 @@ public struct AnesthesiaDrug: Identifiable, Codable {
 
     // `id` is excluded from AI-JSON decoding (AI does not supply it).
     // New fields default gracefully so legacy JSON without them still decodes.
+    //
+    // Primary keys use camelCase (as instructed in the system prompt).
     private enum CodingKeys: String, CodingKey {
         case name
-        case defaultConcentration
-        case concentrationUnit
+        case defaultConcentration   // camelCase
+        case concentrationUnit      // camelCase
         case aiRules
         case manualRules
         case activeRuleSource
     }
 
+    /// Fallback keys — snake_case variants used when the AI returns snake_case
+    /// despite the system prompt's instruction to use camelCase.
+    private enum SnakeCodingKeys: String, CodingKey {
+        case defaultConcentration = "default_concentration"
+        case concentrationUnit    = "concentration_unit"
+        case aiRules              = "ai_rules"
+        case manualRules          = "manual_rules"
+        case activeRuleSource     = "active_rule_source"
+    }
+
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id                   = UUID()
-        name                 = try c.decode(String.self,  forKey: .name)
-        defaultConcentration = try c.decode(Double.self,  forKey: .defaultConcentration)
-        concentrationUnit    = try c.decode(String.self,  forKey: .concentrationUnit)
-        aiRules              = try c.decodeIfPresent([DosageRule].self, forKey: .aiRules) ?? []
-        manualRules          = try c.decodeIfPresent([DosageRule].self, forKey: .manualRules) ?? []
-        activeRuleSource     = try c.decodeIfPresent(RuleSource.self,   forKey: .activeRuleSource) ?? .ai
+        let c  = try decoder.container(keyedBy: CodingKeys.self)
+        let cs = try decoder.container(keyedBy: SnakeCodingKeys.self)
+
+        id   = UUID()
+        name = try c.decode(String.self, forKey: .name)
+
+        // Try camelCase first, then snake_case fallback.
+        guard let conc = try c.decodeIfPresent(Double.self, forKey: .defaultConcentration)
+                      ?? cs.decodeIfPresent(Double.self, forKey: .defaultConcentration) else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.defaultConcentration,
+                .init(codingPath: decoder.codingPath,
+                      debugDescription: "Missing 'defaultConcentration' or 'default_concentration'"))
+        }
+        defaultConcentration = conc
+
+        guard let unit = try c.decodeIfPresent(String.self, forKey: .concentrationUnit)
+                      ?? cs.decodeIfPresent(String.self, forKey: .concentrationUnit) else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.concentrationUnit,
+                .init(codingPath: decoder.codingPath,
+                      debugDescription: "Missing 'concentrationUnit' or 'concentration_unit'"))
+        }
+        concentrationUnit = unit
+
+        aiRules = try c.decodeIfPresent([DosageRule].self, forKey: .aiRules)
+            ?? (try cs.decodeIfPresent([DosageRule].self, forKey: .aiRules))
+            ?? []
+
+        manualRules = try c.decodeIfPresent([DosageRule].self, forKey: .manualRules)
+            ?? (try cs.decodeIfPresent([DosageRule].self, forKey: .manualRules))
+            ?? []
+
+        activeRuleSource = try c.decodeIfPresent(RuleSource.self, forKey: .activeRuleSource)
+            ?? (try cs.decodeIfPresent(RuleSource.self, forKey: .activeRuleSource))
+            ?? .ai
     }
 }
 
@@ -126,7 +166,7 @@ public extension AnesthesiaDrug {
         concentrationUnit: "mg/mL"
     )
 
-    /// 芬太尼 (Fentanyl) — 50 mcg/mL = 0.05 mg/mL
+    /// 芬太尼 (Fentanyl) — 50 μg/mL = 0.05 mg/mL
     static let fentanyl = AnesthesiaDrug(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
         name: "芬太尼",
@@ -134,7 +174,7 @@ public extension AnesthesiaDrug {
         concentrationUnit: "mg/mL"
     )
 
-    /// 瑞芬太尼 (Remifentanil) — 50 mcg/mL = 0.05 mg/mL
+    /// 瑞芬太尼 (Remifentanil) — 50 μg/mL = 0.05 mg/mL
     static let remifentanil = AnesthesiaDrug(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
         name: "瑞芬太尼",

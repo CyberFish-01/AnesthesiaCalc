@@ -197,10 +197,7 @@ struct QARecordCard: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 4)
 
-                Text(record.answer)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(4)
+                MarkdownText(source: record.answer)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 14)

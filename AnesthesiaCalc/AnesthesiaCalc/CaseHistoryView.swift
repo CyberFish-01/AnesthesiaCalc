@@ -266,14 +266,13 @@ struct CaseRecordCard: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 4)
 
-                Text(record.anesthesiaPlan.isEmpty ? "暂无计划" : record.anesthesiaPlan)
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 14)
-                    .transition(.opacity)
+                MarkdownText(
+                    source: record.anesthesiaPlan.isEmpty ? "暂无计划" : record.anesthesiaPlan
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+                .transition(.opacity)
             }
         }
         .background(Color(UIColor.systemBackground))
@@ -300,6 +299,72 @@ struct CaseRecordCard: View {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// MARK: — MarkdownText
+// ══════════════════════════════════════════════════════════════════════
+
+/// Renders a string that may contain Markdown into a styled SwiftUI view.
+///
+/// **Supported syntax:**
+/// - `### / ## / #` headings  → bold text with increasing visual weight and top padding
+/// - `**bold**`               → strongly emphasised inline text
+/// - `*italic*`               → emphasised inline text
+/// - `` `code` ``             → inline code spans
+/// - Blank lines              → 4-pt vertical spacer
+///
+/// All parsing is done via native `AttributedString`; any parse failure
+/// falls back to plain text so the UI never crashes on malformed input.
+struct MarkdownText: View {
+
+    let source: String
+    var baseFont: Font       = .callout
+    var baseColor: Color     = .secondary
+    var itemSpacing: CGFloat = 3
+
+    // Shared options — constructed once to avoid repeated allocation.
+    private static let inlineOptions = AttributedString.MarkdownParsingOptions(
+        interpretedSyntax: .inlineOnlyPreservingWhitespace
+    )
+
+    var body: some View {
+        let lines = source.components(separatedBy: "\n")
+        VStack(alignment: .leading, spacing: itemSpacing) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                lineView(for: line)
+            }
+        }
+    }
+
+    // ── Per-line rendering ────────────────────────────────────────────
+
+    @ViewBuilder
+    private func lineView(for line: String) -> some View {
+        if line.hasPrefix("### ") {
+            styledLine(String(line.dropFirst(4)), font: .subheadline.bold(), color: .primary)
+                .padding(.top, 6)
+        } else if line.hasPrefix("## ") {
+            styledLine(String(line.dropFirst(3)), font: .headline.bold(), color: .primary)
+                .padding(.top, 8)
+        } else if line.hasPrefix("# ") {
+            styledLine(String(line.dropFirst(2)), font: .title3.bold(), color: .primary)
+                .padding(.top, 10)
+        } else if line.trimmingCharacters(in: .whitespaces).isEmpty {
+            Color.clear.frame(height: 4)
+        } else {
+            styledLine(line, font: baseFont, color: baseColor)
+        }
+    }
+
+    /// Parses inline Markdown in `text` and applies `font` / `color` to the result.
+    /// Returns a plain `Text` if `AttributedString` parsing fails.
+    private func styledLine(_ text: String, font: Font, color: Color) -> Text {
+        if let attr = try? AttributedString(markdown: text, options: Self.inlineOptions) {
+            return Text(attr).font(font).foregroundStyle(color)
+        }
+        return Text(text).font(font).foregroundStyle(color)
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // MARK: — Preview
 // ══════════════════════════════════════════════════════════════════════
 
@@ -316,7 +381,7 @@ struct CaseRecordCard: View {
         age:            "65岁",
         surgery:        "腹腔镜胆囊切除术",
         conditions:     ["高血压", "糖尿病", "困难气道"],
-        anesthesiaPlan: "建议采用全身麻醉，气管内插管维持气道。\n诱导：丙泊酚 1.5 mg/kg + 芬太尼 1 mcg/kg + 罗库溴铵 0.6 mg/kg IBW。\n维持：丙泊酚 TCI + 瑞芬太尼 0.1–0.3 mcg/kg/min。\n注意：术前需对困难气道做好备案，准备视频喉镜。\n术后镇痛：帕瑞昔布 40 mg iv q12h 联合曲马多按需给药。"
+        anesthesiaPlan: "建议采用全身麻醉，气管内插管维持气道。\n诱导：丙泊酚 1.5 mg/kg + 芬太尼 1 μg/kg + 罗库溴铵 0.6 mg/kg IBW。\n维持：丙泊酚 TCI + 瑞芬太尼 0.1–0.3 μg/kg/min。\n注意：术前需对困难气道做好备案，准备视频喉镜。\n术后镇痛：帕瑞昔布 40 mg iv q12h 联合曲马多按需给药。"
     ))
     .padding()
     .background(Color(UIColor.systemGroupedBackground))
@@ -330,7 +395,7 @@ struct CaseRecordCard: View {
             age:            "65岁",
             surgery:        "腹腔镜胆囊切除术",
             conditions:     ["高血压", "糖尿病", "困难气道"],
-            anesthesiaPlan: "建议采用全身麻醉，气管内插管维持气道。\n诱导：丙泊酚 1.5 mg/kg + 芬太尼 1 mcg/kg + 罗库溴铵 0.6 mg/kg IBW。\n维持：丙泊酚 TCI + 瑞芬太尼 0.1–0.3 mcg/kg/min。\n注意：术前需对困难气道做好备案，准备视频喉镜。\n术后镇痛：帕瑞昔布 40 mg iv q12h 联合曲马多按需给药。"
+            anesthesiaPlan: "建议采用全身麻醉，气管内插管维持气道。\n诱导：丙泊酚 1.5 mg/kg + 芬太尼 1 μg/kg + 罗库溴铵 0.6 mg/kg IBW。\n维持：丙泊酚 TCI + 瑞芬太尼 0.1–0.3 μg/kg/min。\n注意：术前需对困难气道做好备案，准备视频喉镜。\n术后镇痛：帕瑞昔布 40 mg iv q12h 联合曲马多按需给药。"
         ),
         initiallyExpanded: true
     )

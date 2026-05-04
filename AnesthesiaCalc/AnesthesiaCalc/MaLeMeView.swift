@@ -37,36 +37,45 @@ struct MaLeMeView: View {
     // ══════════════════════════════════════════════════════════════════
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 28) {
-                    titleSection
-                    inputCard
-                    if !qaHistory.records.isEmpty {
-                        recentSection
+        ZStack {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 28) {
+                        titleSection
+                        inputCard
+                        if !qaHistory.records.isEmpty {
+                            recentSection
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 16)
+                    .padding(.bottom, 40)
+                }
+                .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+                .onTapGesture { isEditorFocused = false }
+                .alert("查询失败", isPresented: $showError, presenting: errorMessage) { _ in
+                    Button("好的", role: .cancel) {}
+                } message: { msg in
+                    Text(msg)
+                }
+                .sheet(item: $sheetRecord) { record in
+                    QAResultSheet(record: record)
+                }
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("完成") { isEditorFocused = false }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 40)
             }
-            .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
-            .onTapGesture { isEditorFocused = false }
-            .alert("查询失败", isPresented: $showError, presenting: errorMessage) { _ in
-                Button("好的", role: .cancel) {}
-            } message: { msg in
-                Text(msg)
-            }
-            .sheet(item: $sheetRecord) { record in
-                QAResultSheet(record: record)
-            }
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("完成") { isEditorFocused = false }
-                }
+
+            // ── Premium loading overlay ────────────────────────────────
+            if isLoading {
+                DirectorLoadingView()
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isLoading)
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -187,10 +196,12 @@ struct MaLeMeView: View {
 
     private func sendQuestion() {
         isEditorFocused = false
-        isLoading = true
         let question = questionText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        Task {
+        Task { @MainActor in
+            isLoading = true
+            defer { isLoading = false }
+
             do {
                 let response = try await AIAssistantService.shared.fetchMedicalAnswer(
                     question: question
@@ -200,18 +211,14 @@ struct MaLeMeView: View {
                     answer:   response.answer,
                     category: response.category
                 )
-                await MainActor.run {
-                    qaHistory.save(record)
-                    sheetRecord  = record
-                    questionText = ""
-                    isLoading    = false
-                }
+                qaHistory.save(record)
+                sheetRecord  = record
+                questionText = ""
             } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showError    = true
-                    isLoading    = false
-                }
+                errorMessage = (error as? URLError)?.code == .timedOut
+                    ? "网络开小差了，主任思考被打断，请重试。"
+                    : error.localizedDescription
+                showError = true
             }
         }
     }
@@ -294,10 +301,7 @@ struct QAResultSheet: View {
                     Divider()
 
                     // Answer
-                    Text(record.answer)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(5)
+                    MarkdownText(source: record.answer, baseFont: .body, baseColor: .primary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)

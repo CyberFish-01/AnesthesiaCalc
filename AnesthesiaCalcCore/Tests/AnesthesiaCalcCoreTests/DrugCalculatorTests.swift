@@ -112,8 +112,8 @@ final class DrugCalculatorTests: XCTestCase {
     func test_formattedDose_fentanyl_shows_mcg() throws {
         let patient = Patient(weight: 70, height: 175, age: 40, sex: .male)
         let result  = try XCTUnwrap(calculator.calculateLegacyDose(patient: patient, drug: .fentanyl))
-        XCTAssertTrue(result.formattedDose.hasSuffix("mcg"),
-                      "Fentanyl dose must be in mcg, got: \(result.formattedDose)")
+        XCTAssertTrue(result.formattedDose.hasSuffix("μg"),
+                      "Fentanyl dose must be in μg, got: \(result.formattedDose)")
     }
 
     func test_formattedVolume_propofol() throws {

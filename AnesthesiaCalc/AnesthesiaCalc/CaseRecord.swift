@@ -36,6 +36,24 @@ struct CaseRecord: Identifiable, Codable {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// MARK: — UpsertResult
+// ══════════════════════════════════════════════════════════════════════
+
+/// Indicates whether an `upsert` call created a brand-new record or merged
+/// data into an existing one.
+enum UpsertResult {
+    case created
+    case updated
+
+    var message: String {
+        switch self {
+        case .created: return "已创建新患者档案"
+        case .updated: return "已更新该患者信息"
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // MARK: — HistoryManager
 // ══════════════════════════════════════════════════════════════════════
 
@@ -56,7 +74,55 @@ final class HistoryManager: ObservableObject {
 
     // ── Public API ─────────────────────────────────────────────────────
 
-    /// Insert a new record at the front (newest-first) and persist.
+    /// **Upsert** a record using `hospitalNumber` as the unique key.
+    ///
+    /// - If `record.hospitalNumber` is non-empty **and** a record with the
+    ///   same number already exists, the stored record is updated in-place:
+    ///   non-empty fields from `record` overwrite the stored values, the
+    ///   `date` is bumped to now, and the record is moved to the front.
+    /// - If no match is found (or the hospital number is blank), `record` is
+    ///   inserted at the front as a fresh entry.
+    ///
+    /// - Returns: `.updated` if an existing record was merged,
+    ///            `.created` if a new record was inserted.
+    @discardableResult
+    func upsert(_ record: CaseRecord) -> UpsertResult {
+        let trimmed = record.hospitalNumber.trimmingCharacters(in: .whitespaces)
+
+        if !trimmed.isEmpty,
+           let idx = records.firstIndex(where: {
+               !$0.hospitalNumber.trimmingCharacters(in: .whitespaces).isEmpty
+                   && $0.hospitalNumber == trimmed
+           }) {
+            var merged = records[idx]
+
+            // Overwrite stored fields only when the incoming value is non-empty/non-nil.
+            // This prevents a "lightweight" archive (no plan, no surgery) from wiping
+            // data that was previously set by a full AI generation.
+            if !record.patientName.isEmpty, record.patientName != "佚名" {
+                merged.patientName = record.patientName
+            }
+            if !record.age.isEmpty            { merged.age            = record.age }
+            if !record.surgery.isEmpty        { merged.surgery        = record.surgery }
+            if !record.conditions.isEmpty     { merged.conditions     = record.conditions }
+            if !record.anesthesiaPlan.isEmpty { merged.anesthesiaPlan = record.anesthesiaPlan }
+            if let w = record.weightKg        { merged.weightKg       = w }
+            if let h = record.heightCm        { merged.heightCm       = h }
+            merged.date = Date()
+
+            records.remove(at: idx)
+            records.insert(merged, at: 0)
+            persist()
+            return .updated
+        } else {
+            records.insert(record, at: 0)
+            persist()
+            return .created
+        }
+    }
+
+    /// Unconditional insert — use `upsert` in most cases.
+    /// Kept for legacy call-sites that intentionally bypass deduplication.
     func save(_ record: CaseRecord) {
         records.insert(record, at: 0)
         persist()
@@ -65,18 +131,6 @@ final class HistoryManager: ObservableObject {
     /// Remove records at the given offsets and persist.
     func delete(at offsets: IndexSet) {
         records.remove(atOffsets: offsets)
-        persist()
-    }
-
-    /// Update an existing record's anthropometrics and optionally its name.
-    /// Bumps `date` to now so the record floats to the top on next sort.
-    func update(at index: Int, weight: Double, height: Double, age: String, name: String?) {
-        guard records.indices.contains(index) else { return }
-        records[index].weightKg = weight
-        records[index].heightCm = height
-        records[index].age      = age
-        if let name { records[index].patientName = name }
-        records[index].date = Date()
         persist()
     }
 

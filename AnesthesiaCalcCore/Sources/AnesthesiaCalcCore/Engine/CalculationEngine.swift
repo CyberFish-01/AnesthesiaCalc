@@ -37,9 +37,9 @@ public struct DoseResult: Equatable {
     /// True when the rule specifies a fixed (non-range) dose.
     public var isFixedDose: Bool { abs(minDisplayDose - maxDisplayDose) < 1e-9 }
 
-    /// e.g. "105.0 – 175.0 mg"  or  "70.0 mcg"  (fixed dose)
+    /// e.g. "105.0 – 175.0 mg"  or  "70.0 μg"  (fixed dose)
     public var formattedDose: String {
-        let u = doseUnit.rawValue
+        let u = doseUnit.displayValue
         if isFixedDose {
             return String(format: "%.1f \(u)", minDisplayDose)
         }

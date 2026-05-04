@@ -48,17 +48,17 @@ public enum DrugLibrary {
     // FENTANYL — Induction (balanced anaesthesia)
     //
     // Reference: Miller's Anesthesia 9th Ed. / BNF / Janssen PI
-    // Dose:        1 – 2 mcg/kg TBW
-    //   Lower end for brief procedures; 2 mcg/kg for major surgery.
-    //   Elderly / haemodynamically compromised: titrate to 1 mcg/kg.
+    // Dose:        1 – 2 μg/kg TBW
+    //   Lower end for brief procedures; 2 μg/kg for major surgery.
+    //   Elderly / haemodynamically compromised: titrate to 1 μg/kg.
     // doseUnit:    .mcg — stored and displayed in micrograms
-    // Preparation: Sublimaze® 50 mcg/mL = 0.05 mg/mL
+    // Preparation: Sublimaze® 50 μg/mL = 0.05 mg/mL
     // ──────────────────────────────────────────────────────────────────
     public static let fentanyl = DrugRule(
         name: "Fentanyl (Induction)",
         weightBase: .totalBodyWeight,
-        doseRange: DoseRange(minDosePerKg: 1.0, maxDosePerKg: 2.0),  // mcg/kg
-        concentrationMgPerMl: 0.05,                                   // 50 mcg/mL
+        doseRange: DoseRange(minDosePerKg: 1.0, maxDosePerKg: 2.0),  // μg/kg
+        concentrationMgPerMl: 0.05,                                   // 50 μg/mL
         ageAdjustments: [
             AgeAdjustment(ageThreshold: 65, scalingFactor: 0.5)       // halve for elderly
         ],
@@ -69,18 +69,18 @@ public enum DrugLibrary {
     // REMIFENTANIL — Induction (legacy engine fallback; bolus path only)
     //
     // Reference: Ultiva® SmPC / Miller's Anesthesia 9th Ed.
-    // Dose:        1 – 2 mcg/kg TBW over 60–90 s
+    // Dose:        1 – 2 μg/kg TBW over 60–90 s
     // doseUnit:    .mcg
-    // Preparation: Ultiva® 1 mg reconstituted in 20 mL → 50 mcg/mL = 0.05 mg/mL
+    // Preparation: Ultiva® 1 mg reconstituted in 20 mL → 50 μg/mL = 0.05 mg/mL
     //
-    // Note: For maintenance and analgesia infusion rates (mcg/kg/min),
+    // Note: For maintenance and analgesia infusion rates (μg/kg/min),
     // use the AI-powered path via AIRuleEngine / DrugCalculator.calculateDose(patient:drug:doseType:).
     // ──────────────────────────────────────────────────────────────────
     public static let remifentanil = DrugRule(
         name: "Remifentanil (Induction)",
         weightBase: .totalBodyWeight,
-        doseRange: DoseRange(minDosePerKg: 1.0, maxDosePerKg: 2.0),  // mcg/kg
-        concentrationMgPerMl: 0.05,                                   // 50 mcg/mL
+        doseRange: DoseRange(minDosePerKg: 1.0, maxDosePerKg: 2.0),  // μg/kg
+        concentrationMgPerMl: 0.05,                                   // 50 μg/mL
         ageAdjustments: [],
         doseUnit: .mcg
     )

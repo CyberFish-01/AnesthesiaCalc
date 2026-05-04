@@ -40,9 +40,10 @@ public struct DrugDoseRange: Equatable {
 
     // ── Formatting ────────────────────────────────────────────────────
 
-    /// e.g. "105.0 – 175.0 mg"  /  "4.0 – 12.0 mg/h"  /  "0.1 – 0.5 mcg/min"
+    /// e.g. "105.0 – 175.0 mg"  /  "4.0 – 12.0 mg/h"  /  "0.1 – 0.5 μg/min"
     public var displayString: String {
-        let suffix = unit + doseInterval.displaySuffix
+        let displayUnit = unit == "mcg" ? "μg" : unit
+        let suffix = displayUnit + doseInterval.displaySuffix
         if abs(minDose - maxDose) < 1e-9 {
             return String(format: "%.1f \(suffix)", minDose)
         }
@@ -189,6 +190,62 @@ public final class DrugCalculator {
         var maxDose = rule.maxMultiplier * weight * ageScale
 
         // ── Step 5: Clamp to absoluteMaxDose (patient-safety ceiling) ─
+        var clamped = false
+        if let cap = rule.absoluteMaxDose, maxDose > cap {
+            maxDose = cap
+            clamped = true
+            if minDose > maxDose { minDose = maxDose }
+        }
+
+        return DrugDoseRange(
+            minDose:                 minDose,
+            maxDose:                 maxDose,
+            unit:                    rule.unit,
+            concentrationMgPerMl:    rule.concentrationMgPerMl,
+            weightUsed:              weight,
+            weightBase:              rule.weightBase,
+            wasClampedByAbsoluteMax: clamped,
+            doseInterval:            rule.doseInterval
+        )
+    }
+
+    /// Calculate a dose using a raw doseType string instead of the `DoseType` enum.
+    ///
+    /// This overload is the preferred path for AI-added drugs whose `doseType`
+    /// values may be arbitrary Chinese strings (e.g. "诱导", "维持") that do not
+    /// correspond to any `DoseType` enum case rawValue.
+    ///
+    /// - Parameters:
+    ///   - patient:         The patient's demographics.
+    ///   - drug:            The `AnesthesiaDrug` to calculate.
+    ///   - doseTypeString:  The raw doseType string from `DosageRule.doseType`.
+    /// - Returns: A `DrugDoseRange` on success, or `nil` when no matching rule is found.
+    public func calculateDose(
+        patient: Patient,
+        drug: AnesthesiaDrug,
+        doseTypeString: String
+    ) -> DrugDoseRange? {
+
+        let rule: DosageRule?
+        if !drug.activeRules.isEmpty {
+            rule = drug.activeRules.first { $0.doseType == doseTypeString }
+        } else {
+            rule = ruleEngine.allRules.first {
+                ($0.drug ?? "") == drug.name && $0.doseType == doseTypeString
+            }
+        }
+        guard let rule else { return nil }
+
+        let weight = patient.resolvedWeight(for: rule.weightBase)
+
+        var ageScale = 1.0
+        for adjustment in rule.ageAdjustments ?? [] where patient.age >= adjustment.ageThreshold {
+            ageScale *= adjustment.scalingFactor
+        }
+
+        var minDose = rule.minMultiplier * weight * ageScale
+        var maxDose = rule.maxMultiplier * weight * ageScale
+
         var clamped = false
         if let cap = rule.absoluteMaxDose, maxDose > cap {
             maxDose = cap

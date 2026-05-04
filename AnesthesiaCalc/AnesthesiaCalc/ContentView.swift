@@ -165,12 +165,9 @@ struct CalculatorHomeView: View {
     // ══════════════════════════════════════════════════════════════════════
 
     private var drugCardsSection: some View {
-        LazyVGrid(
-            columns: [GridItem(.flexible()), GridItem(.flexible())],
-            spacing: 8
-        ) {
+        VStack(spacing: 10) {
             ForEach(drugManager.activeDrugs) { drug in
-                DrugCard(drug: drug, patient: patient, calculator: calculator)
+                UniversalDrugCardView(drug: drug, patient: patient, calculator: calculator)
             }
         }
     }
@@ -179,35 +176,21 @@ struct CalculatorHomeView: View {
     // MARK: — Archive / Import helpers
     // ══════════════════════════════════════════════════════════════════════
 
-    /// One-tap archive: updates an existing record if hospitalNumber matches,
-    /// otherwise inserts a new minimal CaseRecord.
+    /// One-tap archive: upserts the current patient using `hospitalNumber` as
+    /// the unique key — merges into an existing record or creates a new one.
     private func archiveCurrentPatient() {
         let ageStr = ageText.isEmpty ? "0岁" : "\(ageText)岁"
-        if !hospitalNumber.isEmpty,
-           let idx = historyManager.records.firstIndex(where: {
-               $0.hospitalNumber == hospitalNumber
-           }) {
-            historyManager.update(
-                at: idx,
-                weight: patientWeight,
-                height: patientHeight,
-                age:    ageStr,
-                name:   patientName.isEmpty ? nil : patientName
-            )
-            archiveAlertMessage = "已更新该患者信息"
-        } else {
-            historyManager.save(CaseRecord(
-                patientName:    patientName.isEmpty ? "佚名" : patientName,
-                hospitalNumber: hospitalNumber,
-                age:            ageStr,
-                surgery:        "",
-                conditions:     [],
-                anesthesiaPlan: "",
-                weightKg:       patientWeight,
-                heightCm:       patientHeight
-            ))
-            archiveAlertMessage = "已创建新患者档案"
-        }
+        let record = CaseRecord(
+            patientName:    patientName.isEmpty ? "佚名" : patientName,
+            hospitalNumber: hospitalNumber,
+            age:            ageStr,
+            surgery:        "",
+            conditions:     [],
+            anesthesiaPlan: "",
+            weightKg:       patientWeight,
+            heightCm:       patientHeight
+        )
+        archiveAlertMessage = historyManager.upsert(record).message
         showArchiveAlert = true
     }
 
@@ -420,183 +403,6 @@ private struct ImportRecordRow: View {
             .padding(.vertical, 2)
             .background(Color(UIColor.tertiarySystemGroupedBackground),
                         in: Capsule())
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// MARK: — DrugCard
-// ══════════════════════════════════════════════════════════════════════════
-
-private struct DrugCard: View {
-    let drug:       AnesthesiaDrug
-    let patient:    Patient?
-    let calculator: DrugCalculator
-
-    @State private var storedDoseType: DoseType? = nil
-
-    private var availableDoseTypes: [DoseType] {
-        // Prefer embedded activeRules; fall back to AIRuleEngine for legacy drugs.
-        let activeDoseTypes = Set(drug.activeRules.map { $0.doseType })
-        if !activeDoseTypes.isEmpty {
-            return DoseType.allCases.filter { activeDoseTypes.contains($0.rawValue) }
-        }
-        return DoseType.allCases.filter {
-            AIRuleEngine.shared.dosageRule(for: drug, doseType: $0) != nil
-        }
-    }
-
-    private var selectedDoseType: DoseType {
-        let avail = availableDoseTypes
-        if let stored = storedDoseType, avail.contains(stored) { return stored }
-        return avail.first ?? .induction
-    }
-
-    private var doseRange: DrugDoseRange? {
-        guard let p = patient else { return nil }
-        return calculator.calculateDose(patient: p, drug: drug, doseType: selectedDoseType)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            cardHeader
-            Divider().padding(.horizontal, 16)
-            resultSection
-        }
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
-    }
-
-    private var cardHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                Text(drug.name)
-                    .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer(minLength: 4)
-                scenarioPicker
-            }
-            Text(concentrationLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-    }
-
-    private var concentrationLabel: String {
-        let c = drug.defaultConcentration
-        let u = drug.concentrationUnit
-        if c < 1 {
-            return String(format: "%.3g %@  (%g mcg/mL)", c, u, c * 1000)
-        }
-        return String(format: "%g %@", c, u)
-    }
-
-    @ViewBuilder
-    private var scenarioPicker: some View {
-        if availableDoseTypes.count > 1 {
-            Menu {
-                ForEach(availableDoseTypes, id: \.self) { type in
-                    Button(action: { storedDoseType = type }) {
-                        if type == selectedDoseType {
-                            Label(type.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(type.displayName)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 3) {
-                    Text(selectedDoseType.displayName)
-                        .font(.caption.weight(.semibold))
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9).weight(.bold))
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.accentColor.opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(Color.accentColor)
-            }
-        } else {
-            Text(selectedDoseType.displayName)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(UIColor.tertiarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 7))
-        }
-    }
-
-    @ViewBuilder
-    private var resultSection: some View {
-        if let r = doseRange {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(volumeString(for: r))
-                        .font(.system(.title3, design: .rounded).weight(.heavy))
-                        .foregroundStyle(Color.accentColor)
-                        .minimumScaleFactor(0.55)
-                        .lineLimit(1)
-                    if r.wasClampedByAbsoluteMax {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                Text(r.displayString)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(weightBasisLabel(for: r))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-        } else {
-            VStack(spacing: 4) {
-                Image(systemName: "keyboard")
-                    .foregroundStyle(.tertiary)
-                Text("请输入患者信息")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
-        }
-    }
-
-    private func volumeString(for r: DrugDoseRange) -> String {
-        let toMg  = DoseUnit(rawValue: r.unit)?.toMgFactor ?? 1.0
-        let conc  = drug.defaultConcentration
-        let minMl = (r.minDose * toMg) / conc
-        let maxMl = (r.maxDose * toMg) / conc
-        let suffix = "mL" + r.doseInterval.displaySuffix
-        if abs(minMl - maxMl) < 1e-9 {
-            return String(format: "%.1f \(suffix)", minMl)
-        }
-        return String(format: "%.1f – %.1f \(suffix)", minMl, maxMl)
-    }
-
-    private func weightBasisLabel(for r: DrugDoseRange) -> String {
-        let basis: String
-        switch r.weightBase {
-        case .totalBodyWeight: basis = "实际体重 (TBW)"
-        case .idealBodyWeight: basis = "理想体重 (IBW)"
-        case .leanBodyWeight:  basis = "瘦体重 (LBW)"
-        }
-        return "\(basis)  \(String(format: "%.1f", r.weightUsed)) kg"
     }
 }
 
