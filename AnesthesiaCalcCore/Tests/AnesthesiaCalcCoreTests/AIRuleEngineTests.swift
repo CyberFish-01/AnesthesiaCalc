@@ -10,9 +10,9 @@ final class AIRuleEngineTests: XCTestCase {
     /// A fresh engine with default rules loaded (no shared-state pollution)
     private func freshEngine() -> AIRuleEngine { AIRuleEngine() }
 
-    private let adultMale70 = Patient(weight: 70,  height: 175, age: 40, sex: .male)
-    private let elderly60   = Patient(weight: 60,  height: 160, age: 68, sex: .female)
-    private let obese120    = Patient(weight: 120, height: 170, age: 45, sex: .male)
+    private let adultMale70 = PatientContext(actualWeight: 70,  heightCm: 175, age: 40, sex: .male)
+    private let elderly60   = PatientContext(actualWeight: 60,  heightCm: 160, age: 68, sex: .female)
+    private let obese120    = PatientContext(actualWeight: 120, heightCm: 170, age: 45, sex: .male)
 
     // ══════════════════════════════════════════════════════════════════
     // MARK: — Default rules loaded correctly
@@ -33,7 +33,7 @@ final class AIRuleEngineTests: XCTestCase {
         XCTAssertEqual(rule.unit, "mg")
         XCTAssertEqual(rule.concentrationMgPerMl, 10.0, accuracy: 0.001)
         XCTAssertEqual(rule.absoluteMaxDose, 300.0)
-        XCTAssertEqual(rule.ageAdjustments?.first?.ageThreshold, 65)
+        XCTAssertEqual(rule.ageAdjustments.first?.ageThreshold, 65)
     }
 
     func test_rocuronium_defaultRule_uses_IBW() {
@@ -84,7 +84,7 @@ final class AIRuleEngineTests: XCTestCase {
         XCTAssertEqual(range.weightBase, .idealBodyWeight)
         XCTAssertEqual(range.weightUsed, obese120.idealBodyWeight, accuracy: 0.001)
 
-        let tbwMax = 0.9 * obese120.weight  // 108 mg — what TBW would give
+        let tbwMax = 0.9 * obese120.actualWeight  // 108 mg — what TBW would give
         XCTAssertLessThan(range.maxDose, tbwMax,
                           "IBW-based dose must be lower than TBW-based for obese patient")
     }
@@ -108,7 +108,7 @@ final class AIRuleEngineTests: XCTestCase {
     func test_absoluteMaxDose_clamps_maxDose_when_exceeded() {
         // Patient heavy enough to exceed the 300 mg propofol cap
         // TBW = 200 kg → 2.5 × 200 = 500 mg > 300 mg cap
-        let heavyPatient = Patient(weight: 200, height: 190, age: 40, sex: .male)
+        let heavyPatient = PatientContext(actualWeight: 200, heightCm: 190, age: 40, sex: .male)
         let calc  = DrugCalculator(ruleEngine: freshEngine())
         let range = calc.calculateDose(patient: heavyPatient, drug: .propofol, doseType: .induction)!
 
@@ -137,14 +137,14 @@ final class AIRuleEngineTests: XCTestCase {
             unit:                 "mg",
             concentrationMgPerMl: 10.0,
             absoluteMaxDose:      50.0,   // extremely low cap for the test
-            ageAdjustments:       nil
+            ageAdjustments:       []
         )
         let engine = freshEngine()
         engine.replaceAllRules(with: [tightRule])
         // Give queue time to process (barrier write is async)
         Thread.sleep(forTimeInterval: 0.05)
 
-        let patient = Patient(weight: 70, height: 175, age: 40, sex: .male)
+        let patient = PatientContext(actualWeight: 70, heightCm: 175, age: 40, sex: .male)
         let calc    = DrugCalculator(ruleEngine: engine)
         let range   = calc.calculateDose(patient: patient, drug: .propofol, doseType: .induction)!
 

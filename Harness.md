@@ -72,3 +72,19 @@
 
 ## Check 16: 输入边界与认知防呆 (Input Validation)
 - **禁止静默保留**：当患者的体征输入框被清空或输入无效字符时，系统底层状态必须同步置为 `nil` 或 `0`，并触发 UI 拦截。绝对禁止后台隐蔽使用旧数据。
+
+## Check 17: 新模块独立隔离 (New Module Isolation)
+- 强制规则 1：气道/ABL/液体/预案/ABG 五个新模块的 Core 引擎必须为独立枚举，每次调用接收全新 Input struct，不持有任何可变状态。
+- 强制规则 2：新模块 UI 视图必须通过 `ClinicalContext.shared` 获取患者数据，不得自行维护独立的患者状态变量。
+- 强制规则 3：新模块之间不得互相引用——每个模块是完全自包含的计算单元。
+
+## Check 18: 紧急预案剂量正确性 (Emergency Protocol Dosage Correctness)
+- 强制规则 1：体重依赖的预计算剂量必须基于 `EmergencyProtocolEngine.generateAll(for:)` 接收的 weightKg 参数，不得硬编码固定剂量在 UI 层。
+- 强制规则 2：预案中药物的计算剂量与实际给药指导 (rawInstruction) 必须一致——如氨甲环酸统一为固定 1g，丹曲林为 2.5mg/kg。
+- 强制规则 3：预案的识别要点、立即措施、用药步骤、升级措施四部分必须全部为非空数组。
+
+## Check 19: ABG 分析公式正确性 (ABG Formula Correctness)
+- 强制规则 1：Winter 公式实现必须为 `1.5 × HCO₃ + 8 ± 2`。
+- 强制规则 2：A-aDO₂ 公式必须为 `(PB - 47) × FIO₂ - PaCO₂ / 0.8 - PaO₂`。
+- 强制规则 3：AG 公式必须为 `Na⁺ - Cl⁻ - HCO₃⁻`。
+- 强制规则 4：乳酸风险分层必须严格对应 <2.0 / 2.0-4.0 / 4.0-8.0 / >8.0。

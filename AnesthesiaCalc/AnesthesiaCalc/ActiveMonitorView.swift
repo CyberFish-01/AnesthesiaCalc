@@ -12,7 +12,7 @@ struct MonitorAlert: Equatable {
 
 enum ActiveMonitor {
     /// Evaluate clinical rules and return an alert if any trigger.
-    static func check(patient: Patient?, drugs: [AnesthesiaDrug]) -> MonitorAlert? {
+    static func check(patient: PatientContext?, drugs: [AnesthesiaDrug]) -> MonitorAlert? {
         guard let p = patient else { return nil }
 
         // Rule 1: age > 80 + propofol → circulatory warning

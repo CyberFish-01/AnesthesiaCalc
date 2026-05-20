@@ -56,7 +56,7 @@
 
 ```
 ClinicalContext.shared (Single Source of Truth, @Published)
-  └─→ Patient (轻量计算输入)
+  └─→ PatientContext (统一患者值类型)
         └─→ DrugCalculator.calculateDose(...)
               └─→ DrugDoseRange (标准化结果，含体积/流速/体重基准)
                     └─→ View 渲染
@@ -69,7 +69,6 @@ AnesthesiaCalc/
 │       ├── AIEngine/           # AIAssistantService、AIRuleEngine
 │       ├── DrugLibrary/        # AnesthesiaDrug、DosageRule、DrugCalculator
 │       │                       # DrugCatalog (45 种)、DrugManager (持久化)
-│       │                       # Patient (计算输入结构体)
 │       ├── Engine/             # CalculationEngine、PediatricLogic
 │       │                       # PropofolCalculator、RiskEngine
 │       └── Models/             # PatientContext、DoseUnit
@@ -98,8 +97,7 @@ AnesthesiaCalc/
 
 ### 关键类型
 - `ClinicalContext` — 全局临床上下文单例 (`ObservableObject`)，持有 String-backed TextField 绑定与规范化 Double 值，跨页面广播
-- `Patient` — 轻量计算输入结构体（TBW/IBW/LBW/BMI，值类型），由 `ClinicalContext` 派生供 `DrugCalculator` 使用
-- `PatientContext` — 患者完整画像（TBW/IBW/LBW/BMI 计算，Devine/Boer 公式）
+- `PatientContext` — 患者完整画像（TBW/IBW/LBW/BMI 计算，Devine/Boer 公式），Core 与 UI 层统一使用的唯一患者值类型
 - `DosageRule` — 可替换的剂量规则（含 `doseType`、`doseInterval`、`weightBase`、龄调整，含 `precondition` 约束）
 - `DrugDoseRange` — 标准化计算结果（含体积、流速、体重基准、钳制标记等）
 - `AnesthesiaDrug` — 药物实体（双规则集 AI+手动、可见性状态、浓度）

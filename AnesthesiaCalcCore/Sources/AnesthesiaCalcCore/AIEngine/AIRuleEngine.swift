@@ -83,9 +83,9 @@ public struct DosageRule: Equatable {
     /// When non-nil, the engine must clamp the calculated dose to this value.
     public let absoluteMaxDose: Double?
 
-    /// Optional age-triggered dose reductions injected by the AI.
-    /// Falls back to an empty array when omitted from JSON.
-    public let ageAdjustments: [AgeAdjustment]?
+    /// Age-triggered dose reductions injected by the AI.
+    /// Defaults to an empty array.
+    public let ageAdjustments: [AgeAdjustment]
 
     /// Time basis of the multiplier — bolus, per-hour infusion, or per-minute infusion.
     /// Defaults to `.bolus` when the field is absent from JSON (backward compatible).
@@ -112,7 +112,7 @@ public struct DosageRule: Equatable {
         unit: String,
         concentrationMgPerMl: Double,
         absoluteMaxDose: Double? = nil,
-        ageAdjustments: [AgeAdjustment]? = nil,
+        ageAdjustments: [AgeAdjustment] = [],
         doseInterval: DoseInterval = .bolus,
         note: String? = nil
     ) {
@@ -145,7 +145,7 @@ public struct DosageRule: Equatable {
             weightBase: weightBase,
             doseRange: DoseRange(minDosePerKg: minMultiplier, maxDosePerKg: maxMultiplier),
             concentrationMgPerMl: concentrationMgPerMl,
-            ageAdjustments: ageAdjustments ?? [],
+            ageAdjustments: ageAdjustments,
             doseUnit: doseUnit
         )
     }
@@ -226,6 +226,7 @@ extension DosageRule: Codable {
 
         ageAdjustments = try c.decodeIfPresent([AgeAdjustment].self, forKey: .ageAdjustments)
             ?? (try cs.decodeIfPresent([AgeAdjustment].self, forKey: .ageAdjustments))
+            ?? []
 
         doseInterval = try c.decodeIfPresent(DoseInterval.self, forKey: .doseInterval)
             ?? (try cs.decodeIfPresent(DoseInterval.self, forKey: .doseInterval))

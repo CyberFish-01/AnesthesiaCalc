@@ -1,155 +1,146 @@
 # Project_Status — AnesthesiaCalc
 
-> 最后更新: 2026-05-04
+> 最后更新: 2026-05-21
 
 ## 1. 项目概览
 
-麻醉药物剂量计算 iOS 应用（Swift 5.9，iOS 16+ / macOS 13+）。双模块架构：纯逻辑层 `AnesthesiaCalcCore` + UI 层 `AnesthesiaCalc`。
+麻醉药物剂量计算 + 围术期辅助决策 iOS 应用（Swift 5.9，iOS 16+ / macOS 13+）。
+双模块架构：纯逻辑层 `AnesthesiaCalcCore` + UI 层 `AnesthesiaCalc`。
+
+**本轮新增**：气道评估、允许失血量 (ABL) + 输血指征、液体管理 (4-2-1)、紧急预案速查、ABG 血气分析 — 5 个 Core 引擎 + 5 个 UI 视图。
 
 ## 2. 目录结构
 
 ```
 AnesthesiaCalc/
-├── AnesthesiaCalc.xcodeproj              # Xcode 项目 (PBXFileSystemSynchronizedRootGroup)
-├── AnesthesiaCalcCore/                   # Swift Package — 纯计算逻辑
+├── AnesthesiaCalc.xcodeproj                    # Xcode 项目 (PBXFileSystemSynchronizedRootGroup)
+├── AnesthesiaCalcCore/                         # Swift Package — 纯计算逻辑
 │   ├── Package.swift
 │   ├── Sources/AnesthesiaCalcCore/
 │   │   ├── Calculators/
-│   │   │   └── PropofolCalculator.swift  # [NEW] 丙泊酚专用计算器
+│   │   │   ├── AirwayAssessmentEngine.swift    # [NEW] 气道评估引擎 (6维评分+OBESE)
+│   │   │   ├── ABLCalculator.swift             # [NEW] 允许失血量计算器
+│   │   │   ├── FluidManagementCalculator.swift # [NEW] 液体管理计算器 (4-2-1+第三间隙)
+│   │   │   ├── ABGAnalyzer.swift               # [NEW] 血气分析器 (Winter/AG/A-aDO₂)
+│   │   │   └── PropofolCalculator.swift        # 丙泊酚专用计算器
 │   │   ├── AIEngine/
-│   │   │   ├── AIAssistantService.swift  # OpenAI 兼容 API，获取 AI 药物规则
-│   │   │   └── AIRuleEngine.swift        # 线程安全规则引擎，含默认 DosageRule 库
+│   │   │   ├── AIAssistantService.swift        # OpenAI 兼容 API (已优化提示词+response_format)
+│   │   │   └── AIRuleEngine.swift              # 线程安全规则引擎，含 46 条默认 DosageRule
 │   │   ├── DrugLibrary/
-│   │   │   ├── AnesthesiaDrug.swift      # 药物实体 (Identifiable, Codable)
-│   │   │   ├── DrugCalculator.swift      # 主计算服务 (AI 路径 + 旧版回退)
-│   │   │   ├── DrugLibrary.swift         # 旧版 DrugRule 静态目录
-│   │   │   └── DrugManager.swift         # ObservableObject 单例，管理药物列表
+│   │   │   ├── AnesthesiaDrug.swift            # 药物实体 (双规则源)
+│   │   │   ├── DrugCalculator.swift            # 主计算服务 (AI 路径 + 旧版回退)
+│   │   │   ├── DrugCatalog.swift               # 45 种药物分类目录 (RiskEngine 复用)
+│   │   │   ├── DrugLibrary.swift               # 旧版 DrugRule 静态目录 (已弃用标注)
+│   │   │   └── DrugManager.swift               # ObservableObject 单例
 │   │   ├── Engine/
-│   │   │   └── CalculationEngine.swift   # 旧版纯计算引擎 (DrugRule → DoseResult)
+│   │   │   ├── CalculationEngine.swift         # 旧版计算引擎 (已弃用标注)
+│   │   │   ├── EmergencyProtocolEngine.swift   # [NEW] 紧急预案引擎 (6套，体重预计算)
+│   │   │   ├── PediatricLogic.swift            # 儿科模式判定
+│   │   │   └── RiskEngine.swift                # 风险筛查+自动体重路由 (DrugCatalog驱动)
 │   │   └── Models/
-│   │       ├── DrugRule.swift            # DrugRule, DoseRange, WeightBase, DoseUnit 等核心类型
-│   │       └── PatientContext.swift      # 患者快照 (TBW/IBW/LBW/BMI, Devine/Boer 公式)
+│   │       ├── DrugRule.swift                  # DrugRule, DoseRange, WeightBase, DoseUnit 等
+│   │       └── PatientContext.swift            # 唯一患者值类型 (含 resolvedWeight)
 │   └── Tests/AnesthesiaCalcCoreTests/
 │       ├── AIRuleEngineTests.swift
 │       ├── CalculationEngineTests.swift
 │       ├── DrugCalculatorTests.swift
 │       └── PatientContextTests.swift
-├── AnesthesiaCalc/AnesthesiaCalc/        # App Target — 纯 UI
-│   ├── AnesthesiaCalcApp.swift           # @main 入口
-│   ├── MainTabView.swift                 # 4 Tab 根视图 (.ultraThinMaterial tab bar)
-│   ├── ContentView.swift                 # 主计算器视图 (病人卡片 + DrugCard 列表)
-│   ├── PropofolCardView.swift            # [NEW] 丙泊酚卡片 (Liquid Glass 模板)
-│   ├── CalculatorViewModel.swift         # @Observable VM (尚未接入 View)
-│   ├── AIDecisionView.swift              # AI 麻醉方案生成
-│   ├── DirectorLoadingView.swift         # 全屏 Liquid Glass AI 等待动画
-│   ├── MaLeMeView.swift                  # 医疗 Q&A 聊天
-│   ├── SettingsView.swift                # 设置 + 药物管理 + AI 配置
-│   ├── CaseHistoryView.swift             # 病例历史列表
-│   ├── CaseRecord.swift                  # CaseRecord 模型 + HistoryManager
-│   ├── QAHistoryView.swift               # Q&A 对话历史
-│   └── QARecord.swift                    # QARecord 模型 + QAHistoryManager
-├── Architecture.md                       # 架构蓝图
-├── Harness.md                            # 自动审查与熔断机制
-└── CLAUDE.md                             # 全局智能体执行规范
+├── AnesthesiaCalc/AnesthesiaCalc/              # App Target — 纯 UI
+│   ├── AnesthesiaCalcApp.swift                 # @main 入口
+│   ├── MainTabView.swift                       # 5 Tab (计算/决策/问答/血气/设置)
+│   ├── ContentView.swift                       # 主计算器 + 气道/ABL/液体卡片 + 药物列表
+│   ├── ClinicalContext.swift                   # 全局临床上下文 (SSOT)
+│   ├── AirwayCardView.swift                    # [NEW] 气道评估卡片 + Sheet
+│   ├── ABLCardView.swift                       # [NEW] ABL 紧凑卡片
+│   ├── FluidCardView.swift                     # [NEW] 液体管理卡片
+│   ├── ABGTabView.swift                        # [NEW] ABG 血气分析 Tab
+│   ├── EmergencySheetView.swift                # [NEW] 紧急预案 Sheet (可搜索)
+│   ├── UniversalDrugCardView.swift             # 通用药品卡片模板
+│   ├── PropofolCardView.swift                  # 丙泊酚卡片
+│   ├── AIDecisionView.swift                    # AI 麻醉方案生成
+│   ├── MaLeMeView.swift                        # "麻了么" Q&A
+│   ├── SettingsView.swift                      # 设置 + AI 配置 (已优化)
+│   ├── CaseHistoryView.swift                   # 病例历史
+│   ├── ConsultView.swift                       # 会诊视图
+│   ├── ActiveMonitorView.swift                 # 术中监测
+│   ├── DrugDeepDiveView.swift     \            # 药品知识库
+│   └── (其他视图文件)
+├── Architecture.md                             # 架构蓝图
+├── Harness.md                                  # 自动审查与熔断
+├── CLAUDE.md                                   # 全局执行规范
+├── Feature_Requirements.md                     # [NEW] 新功能需求设计
+├── Project_Status.md                           # 本文件
+└── README.md                                   # 项目简介
 ```
 
-## 3. 核心架构
-
-### 3.1 模块边界（红线）
+## 3. 数据流
 
 ```
-┌──────────────────────────────────────────────┐
-│  AnesthesiaCalc (UI)                          │
-│  - SwiftUI Views                              │
-│  - 只能调用 Core 暴露的 public API             │
-│  - 禁止在 View 内做任何医学数学计算             │
-│  - Liquid Glass 毛玻璃 + 20pt 圆角             │
-├──────────────────────────────────────────────┤
-│  AnesthesiaCalcCore (纯逻辑)                   │
-│  - import Foundation  ONLY                    │
-│  - 零 UI 框架依赖 (无 SwiftUI/UIKit)            │
-│  - 全部类型为 public value-type / enum        │
-│  - 线程安全，无副作用                          │
-└──────────────────────────────────────────────┘
+ClinicalContext.shared (SSOT, @Published)
+  └─→ PatientContext (唯一患者值类型)
+        ├─→ DrugCalculator.calculateDose(...)
+        ├─→ AirwayAssessmentEngine.assess(...)
+        ├─→ ABLCalculator.calculate(...)
+        ├─→ FluidManagementCalculator.calculate(...)
+        ├─→ EmergencyProtocolEngine.generateAll(...)
+        └─→ ABGAnalyzer.analyze(...)
 ```
 
-### 3.2 计算路径（双轨制）
+## 4. 架构改良（本轮完成）
 
-| 路径 | 入口 | 规则来源 | 适用 |
-|------|------|---------|------|
-| **新 AI 路径** | `DrugCalculator.calculateDose(patient:drug:doseType:)` | `AIRuleEngine` → `DosageRule` | 所有药物，支持输液 |
-| **旧版回退** | `DrugCalculator.calculateLegacyDose(patient:drug:)` | `DrugLibrary` → `DrugRule` → `CalculationEngine` | 4 个内置药物 |
-| **专用计算器** | `PropofolCalculator.*` | 硬编码常量 (TBW only) | 丙泊酚，UI 模板卡片 |
+| 改良 | 说明 |
+|------|------|
+| Patient 类型删除 | 三层简化为 ClinicalContext → PatientContext |
+| RiskEngine 去硬编码 | DrugCatalog.category(for:) 替代 isMuscleRelaxant/isLipophilicOpioid |
+| DosageRule.ageAdjustments | `[AgeAdjustment]?` → `[AgeAdjustment]` |
+| ClinicalContext.sync(nil) | nil 时不再归零，仅同步 drugs |
+| 双规则弃用标注 | CalculationEngine + DrugLibrary 标记 deprecated |
+| AI 优化 | 提示词 -65%、模型→deepseek-chat、response_format、timeout 60s |
 
-### 3.3 核心类型链
+## 5. 计算路径一览
 
-```
-PatientContext (TBW, IBW, LBW, BMI, age, sex)
-    ↓
-WeightBase (.totalBodyWeight / .idealBodyWeight / .leanBodyWeight)
-    ↓
-DrugRule { weightBase, doseRange (per kg), concentrationMgPerMl, ageAdjustments[], doseUnit }
-    ↓
-CalculationEngine.calculate(rule:patient:) → DoseResult { minMg, maxMg, minMl, maxMl, display... }
-```
-
-## 4. 丙泊酚模块 (本轮新建/重构)
-
-### 4.1 PropofolCalculator (`Core/Calculators/`)
-
-纯数学枚举，仅基于 **TBW**，不含年龄调整或任何额外变量：
-
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `defaultConcentration` | 10.0 mg/mL | Diprivan 1% |
-| `inductionMinMgPerKg` | 1.5 mg/kg | 诱导下限 |
-| `inductionMaxMgPerKg` | 2.5 mg/kg | 诱导上限 |
-| `maintenanceMinMgPerKgPerH` | 4.0 mg/kg/h | 维持下限 |
-| `maintenanceMaxMgPerKgPerH` | 12.0 mg/kg/h | 维持上限 |
-
-| 方法 | 输入 | 输出 |
+| 路径 | 入口 | 状态 |
 |------|------|------|
-| `calculateInduction(weight:concentration:)` | TBW + 浓度 | `PropofolInductionResult` (min/max mg, min/max mL) |
-| `calculateMaintenance(weight:concentration:)` | TBW + 浓度 | `PropofolMaintenanceResult` (min/max mg/h, min/max mL/h) |
-| `pumpRate(weight:doseRateMgPerKgPerH:concentration:)` | TBW + 目标速率 + 浓度 | `Double` mL/h |
+| AI 剂量 | `DrugCalculator.calculateDose(patient:drug:)` | 主路径 |
+| 旧版回退 | `DrugCalculator.calculateLegacyDose(patient:drug:)` | 已弃用 |
+| 丙泊酚专用 | `PropofolCalculator.*` | 活跃 |
+| 气道评估 | `AirwayAssessmentEngine.assess(exam:bmi:)` | **新增** |
+| 允许失血量 | `ABLCalculator.calculate(_:)` | **新增** |
+| 液体管理 | `FluidManagementCalculator.calculate(_:)` | **新增** |
+| 紧急预案 | `EmergencyProtocolEngine.generateAll(for:)` | **新增** |
+| 血气分析 | `ABGAnalyzer.analyze(_:)` | **新增** |
 
-### 4.2 PropofolCardView (`AnesthesiaCalc/`)
+## 6. 当前状态
 
-Liquid Glass 卡片模板，固定 200pt 高度。全部计算委托 `PropofolCalculator`：
+### 已完成
+- [x] 核心计算引擎：15 个源文件，57 个测试
+- [x] 45 种药物剂量计算
+- [x] RiskEngine 改用 DrugCatalog 分类
+- [x] Patient 中间类型删除
+- [x] AI 优化 (提示词/模型/response_format)
+- [x] 气道评估引擎 + UI
+- [x] ABL 计算器 + UI
+- [x] 液体管理计算器 + UI
+- [x] 紧急预案引擎 + UI
+- [x] ABG 血气分析器 + UI
+- [x] MainTabView 3→5 Tab
+- [x] Feature_Requirements.md
 
-- **顶部**: 药品名 (primary) + "维持" Tag (accentColor 浅底胶囊)
-- **诱导行**: 紧凑次要 (`105 – 175 mg` / `10.5 – 17.5 mL`)
-- **核心数值**: 34pt 圆体 `.accentColor` (`28.0 mL/h`)
-- **范围提示**: `.caption2` + `.secondary`
-- **微量泵入口**: 点击弹出 Bottom Sheet (`presentationDetents: .height(160)`) 内含滑块 (4.0–12.0 mg/kg/h, step 0.1)
-- **图标**: `drop.fill` (微量泵), `cross.case.fill` (药物), `chevron.up.chevron.down` (展开)
-
-## 5. UI 设计系统
-
-| 属性 | 规范值 |
-|------|--------|
-| 卡片材质 | `.ultraThinMaterial` (Liquid Glass 毛玻璃) |
-| 卡片圆角 | 20pt (`RoundedRectangle(cornerRadius: 20)`) |
-| 图标 | SF Symbols 单色线条风格 (`.fill` 变体仅做单色渲染) |
-| 字号层级 | 34pt 圆体 (核心值) / headline (标题) / caption (次级标签) / caption2 (范围提示) |
-| 强调色 | `.accentColor` (iOS 系统蓝) |
-| 文字对比度 | `.primary` (纯黑/白) / `.secondary` (浅灰) |
-| 卡片高度 | 固定 200pt（所有药品卡片严格统一） |
-| 交互控件 | 滑块置于半屏 Bottom Sheet，卡片内零动态高度变化 |
-
-## 6. 关键架构规则（来自 Architecture.md / Harness.md）
-
-1. **物理隔离**: View 文件零数学公式，Calculator 文件零 UI 引用
-2. **幻觉阻断**: 所有计算收敛于 TBW 等通用基数，禁止自行推演额外变量
-3. **熔断机制**: 同一模块连续 3 次失败 → 强制回滚 → 输出《逻辑崩塌分析报告》
-4. **关注点分离**: UI 调 Core，Core 不调 UI
-5. **单色极简**: 无多余内边距、无多彩图标、高对比度数值
-
-## 7. 当前状态
-
-- [x] 核心计算层：10 个源文件，57 个测试 (4 个预先存在的 IBW/LBW 精度偏差)
-- [x] 丙泊酚计算器：新建完成，构建通过，物理隔离通过
-- [x] 丙泊酚卡片：重构完成，Liquid Glass 模板，固定高度，Bottom Sheet 滑块
+### 待完成
+- [ ] 新模块单元测试 (5 个引擎 0 测试)
 - [ ] 其他药物卡片未按模板统一
 - [ ] CalculatorViewModel 未接入 View
-- [ ] 旧版 DrugLibrary.propofol 含年龄调整 (>65 ×0.7)，与新 PropofolCalculator 逻辑不一致，需决策是否统一
+- [ ] 双规则体系统一 (DrugRule → DosageRule)
+- [ ] AIRuleEngine 默认规则 JSON 外置
+- [ ] GDFT 动态指标 (SVV/PPV) 输入
+- [ ] 麻醉记录单手动录入版
+
+## 7. 平台要求
+
+- iOS 16.0+ / macOS 13.0+
+- Swift 5.9
+- Xcode 16+ (PBXFileSystemSynchronizedRootGroup 自动同步源文件)
+
+## 8. 免责声明
+
+本应用仅供医疗专业人员临床参考使用，不构成任何医疗建议。

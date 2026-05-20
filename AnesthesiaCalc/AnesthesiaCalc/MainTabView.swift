@@ -48,11 +48,19 @@ struct MainTabView: View {
                 .toolbarBackground(.ultraThinMaterial, for: .tabBar)
                 .toolbarBackground(.visible, for: .tabBar)
 
+            ABGTabView()
+                .tabItem {
+                    Label("血气", systemImage: "heart.text.square")
+                }
+                .tag(3)
+                .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+                .toolbarBackground(.visible, for: .tabBar)
+
             SettingsView()
                 .tabItem {
                     Label("设置", systemImage: "gearshape.fill")
                 }
-                .tag(3)
+                .tag(4)
                 .toolbarBackground(.ultraThinMaterial, for: .tabBar)
                 .toolbarBackground(.visible, for: .tabBar)
         }

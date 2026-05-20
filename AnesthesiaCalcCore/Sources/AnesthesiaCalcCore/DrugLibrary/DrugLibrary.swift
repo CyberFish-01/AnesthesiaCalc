@@ -5,6 +5,11 @@ import Foundation
 /// Each static property is a single, replaceable `DrugRule` value.
 /// When the AI parses an updated guideline, it can overwrite exactly
 /// one entry without touching the engine or any other rule.
+///
+/// - Warning: **Deprecated path.** Prefer AIRuleEngine DosageRule. These static rules
+///   are the conservative baseline; they exist only as a fallback when AIRuleEngine
+///   has no cached rule. FIXME: Migrate all 4 rules to DosageRule format in AIRuleEngine
+///   defaults, then remove DrugLibrary + CalculationEngine.
 public enum DrugLibrary {
 
     // ──────────────────────────────────────────────────────────────────

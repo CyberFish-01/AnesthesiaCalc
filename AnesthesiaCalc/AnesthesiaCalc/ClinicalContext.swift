@@ -29,29 +29,25 @@ final class ClinicalContext: ObservableObject {
     @Published var activeDrugs: [AnesthesiaDrug] = []
 
     // ── Derived ──────────────────────────────────────────────────────────
-    var patient: Patient? {
+    var patient: PatientContext? {
         guard patientWeight > 0, patientHeight > 0,
               let age = Int(ageText), age >= 0 else { return nil }
-        return Patient(weight: patientWeight, height: patientHeight,
-                       age: age, sex: isMale ? .male : .female)
+        return PatientContext(actualWeight: patientWeight, heightCm: patientHeight,
+                              age: age, sex: isMale ? .male : .female)
     }
 
     /// Backward-compatible sync — used when external code pushes a full patient snapshot.
-    func sync(patient: Patient?, drugs: [AnesthesiaDrug]) {
+    func sync(patient: PatientContext?, drugs: [AnesthesiaDrug]) {
         self.activeDrugs = drugs
-        guard let p = patient else {
-            patientWeight = 0
-            patientHeight = 0
-            return
-        }
-        patientWeight = p.weight
-        patientHeight = p.height
+        guard let p = patient else { return }
+        patientWeight = p.actualWeight
+        patientHeight = p.heightCm
         isMale = p.sex == .male
         ageText = String(p.age)
-        weightInput = p.weight.truncatingRemainder(dividingBy: 1) == 0
-            ? String(format: "%.0f", p.weight) : String(format: "%.1f", p.weight)
-        heightInput = p.height.truncatingRemainder(dividingBy: 1) == 0
-            ? String(format: "%.0f", p.height) : String(format: "%.1f", p.height)
+        weightInput = p.actualWeight.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", p.actualWeight) : String(format: "%.1f", p.actualWeight)
+        heightInput = p.heightCm.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", p.heightCm) : String(format: "%.1f", p.heightCm)
     }
 
     func syncDrugs(_ drugs: [AnesthesiaDrug]) {
@@ -62,7 +58,7 @@ final class ClinicalContext: ObservableObject {
     var contextSummary: String {
         var parts: [String] = []
         if let p = patient {
-            parts.append("\(p.sex == .male ? "男" : "女")，\(p.age)岁，\(String(format: "%.0f", p.weight))kg，\(String(format: "%.0f", p.height))cm")
+            parts.append("\(p.sex == .male ? "男" : "女")，\(p.age)岁，\(String(format: "%.0f", p.actualWeight))kg，\(String(format: "%.0f", p.heightCm))cm")
             parts.append("BMI \(String(format: "%.1f", p.bmi))，IBW \(String(format: "%.1f", p.idealBodyWeight))kg")
         }
         if !activeDrugs.isEmpty {

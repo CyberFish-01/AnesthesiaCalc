@@ -77,4 +77,13 @@ public extension PatientContext {
 
     /// Clinically, ≥ 65 years triggers conservative dosing in most guidelines.
     var isElderly: Bool { age >= 65 }
+
+    /// Resolve the correct weight scalar for a given `WeightBase`.
+    public func resolvedWeight(for base: WeightBase) -> Double {
+        switch base {
+        case .totalBodyWeight: return actualWeight
+        case .idealBodyWeight: return idealBodyWeight
+        case .leanBodyWeight:  return leanBodyWeight
+        }
+    }
 }

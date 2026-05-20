@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import SwiftUI
 
 /// Manages the ordered list of drugs shown in the dose calculator.
 ///
@@ -102,10 +101,8 @@ public final class DrugManager: ObservableObject {
     // MARK: - Mutations (call from main thread)
 
     public func toggleActive(_ drugID: UUID) {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            guard let idx = allDrugs.firstIndex(where: { $0.id == drugID }) else { return }
-            allDrugs[idx].isActive.toggle()
-        }
+        guard let idx = allDrugs.firstIndex(where: { $0.id == drugID }) else { return }
+        allDrugs[idx].isActive.toggle()
     }
 
     public func append(_ drug: AnesthesiaDrug) {

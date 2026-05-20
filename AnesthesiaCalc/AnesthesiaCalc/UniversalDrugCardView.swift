@@ -14,7 +14,7 @@ import AnesthesiaCalcCore
 struct UniversalDrugCardView: View {
 
     let drug: AnesthesiaDrug
-    let patient: Patient?
+    let patient: PatientContext?
     let calculator: DrugCalculator
     let isPediatricActive: Bool
 
@@ -53,7 +53,7 @@ struct UniversalDrugCardView: View {
 
     private var riskAssessment: RiskAssessment? {
         guard let p = patient else { return nil }
-        return RiskEngine.assess(patient: p.context, drugName: drug.name)
+        return RiskEngine.assess(patient: p, drugName: drug.name)
     }
 
     // MARK: Body

@@ -583,7 +583,7 @@ private struct ManualRuleFormView: View {
                             unit:                 unit,
                             concentrationMgPerMl: concentrationMgPerMl,
                             absoluteMaxDose:      nil,
-                            ageAdjustments:       nil,
+                            ageAdjustments:       [],
                             doseInterval:         doseInterval
                         )
                         onSave(rule)
@@ -677,48 +677,36 @@ private struct PromptEditorRow: View {
 // ══════════════════════════════════════════════════════════════════════
 
 private let aiDefaultSystemPrompt = """
-    你是一位资深的三甲医院麻醉科主治医师，具有丰富的临床经验和深厚的药理学知识。
-    你的任务是根据最新的临床麻醉指南（包括但不限于：ASA 指南、中华医学会麻醉学分会指南、\
-    欧洲麻醉学会 ESAIC 指南、各药物的官方说明书 SmPC/PI），为用户指定的麻醉药物生成精准的剂量计算规则。
+    你是一位资深的三甲医院麻醉科主治医师。
+    根据最新临床麻醉指南（ASA / 中华医学会麻醉学分会 / ESAIC / SmPC），为指定药物生成剂量规则。
 
-    **严格要求：**
-    1. 你必须且只能返回一段合法的 JSON 字符串。
-    2. 不得包含任何 markdown 标记（如 ```json）、解释文字、注释或任何 JSON 结构以外的内容。
-    3. JSON 中的所有数值必须是合法的 JSON 数字（不得使用字符串表示数值）。
-    4. 极其重要："doseType" 的值必须且只能从以下纯中文词汇中选择：["诱导", "维持", "插管", "镇痛", "镇静", "拮抗"]。\
-    绝不允许输出任何英文或下划线格式（如 induction、induction_analgesia），否则将导致系统解析崩溃！
-    5. "weightBase" 的值只能是：TBW（实际体重）、IBW（理想体重）、LBW（去脂体重）之一。
-    6. "unit" 的值只能是：mg 或 mcg。
-    7. "doseInterval" 的值只能是：bolus（单次推注）、perHour（每小时输注速率）、perMinute（每分钟输注速率）之一。
-    8. 请根据该药物的临床适应症，尽可能完整地覆盖所有适用的 doseType。
-    9. "ageAdjustments" 中的 "scalingFactor" 必须是大于 0 且小于等于 1 的小数（只减量不增量）。
-    10. 若某项可选字段（absoluteMaxDose、ageAdjustments）不适用，直接省略该字段，不要写 null。
+    严格规则：
+    1. 只返回合法 JSON，不含 markdown、注释、解释文字。
+    2. 所有数值必须是 JSON 数字，禁止用字符串表示数值。
+    3. doseType 只能是以下英文值之一：induction / maintenance / intubation / sedation / analgesia / antagonism
+    4. weightBase 只能是：TBW / IBW / LBW
+    5. unit 只能是：mg / mcg
+    6. doseInterval 只能是：bolus / perHour / perMinute
+    7. ageAdjustments.scalingFactor 必须 >0 且 ≤1（只减量）。
+    8. 可选字段（absoluteMaxDose、ageAdjustments）不适用时直接省略，不要写 null。
+    9. 尽可能完整覆盖该药物所有临床适用的 doseType。
 
-    你必须严格按照以下 JSON 结构返回，不得增减顶层字段：
-
+    JSON 结构：
     {
       "drug": {
-        "id": "全局唯一的 UUID 字符串（格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx）",
-        "name": "药物中文名 (英文名)",
-        "defaultConcentration": 市售最常用制剂浓度（mg/mL，纯数字）,
+        "name": "中文名 (英文名)",
+        "defaultConcentration": 数值(mg/mL),
         "concentrationUnit": "mg/mL"
       },
-      "rules": [
-        {
-          "drug": "与 drug.name 完全相同的字符串",
-          "doseType": "上述六个中文值之一（诱导/维持/插管/镇痛/镇静/拮抗）",
-          "minMultiplier": 最小剂量（每kg体重对应的unit数量，纯数字）,
-          "maxMultiplier": 最大剂量（每kg体重对应的unit数量，纯数字）,
-          "weightBase": "TBW / IBW / LBW 之一",
-          "unit": "mg 或 mcg",
-          "concentrationMgPerMl": 制剂浓度（mg/mL，纯数字，必填）,
-          "absoluteMaxDose": 单次/次给药安全上限（纯数字，可选，不适用则省略）,
-          "ageAdjustments": [
-            { "ageThreshold": 触发年龄阈值（整数）, "scalingFactor": 剂量缩减系数（0~1小数） }
-          ],
-          "doseInterval": "bolus / perHour / perMinute 之一"
-        }
-      ]
+      "rules": [{
+        "doseType": "英文值",
+        "minMultiplier": 数值,
+        "maxMultiplier": 数值,
+        "weightBase": "TBW/IBW/LBW",
+        "unit": "mg/mcg",
+        "concentrationMgPerMl": 数值,
+        "doseInterval": "bolus/perHour/perMinute"
+      }]
     }
     """
 
@@ -726,7 +714,7 @@ struct AISettingsView: View {
 
     @AppStorage("ai_api_url")       private var apiURL       = "https://api.openai.com/v1/chat/completions"
     @AppStorage("ai_api_key")       private var apiKey       = ""
-    @AppStorage("ai_model_name")    private var modelName    = "gpt-4o-mini"
+    @AppStorage("ai_model_name")    private var modelName    = "deepseek-chat"
     // Per-module system prompts (empty = use built-in default)
     @AppStorage("ai_system_prompt") private var calcPrompt    = aiDefaultSystemPrompt
     @AppStorage("ai_decision_prompt") private var decisionPrompt = ""

@@ -60,6 +60,12 @@ public struct DoseResult: Equatable {
 /// Pure, stateless calculation service.
 /// All inputs are value types; the function has no side-effects and is
 /// trivially testable and thread-safe.
+///
+/// - Warning: **Deprecated path.** Prefer `DrugCalculator.calculateDose(patient:drug:doseType:)`
+///   which routes through `AIRuleEngine`. This engine and `DrugLibrary` serve as the
+///   conservative clinical baseline fallback only.
+///   FIXME: Once all DrugLibrary rules are verified against AIRuleEngine defaults,
+///   migrate consumers to the primary path and remove CalculationEngine + DrugLibrary.
 public enum CalculationEngine {
 
     /// Calculate the dose for a given drug rule and patient.

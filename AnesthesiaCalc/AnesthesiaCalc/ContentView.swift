@@ -24,6 +24,7 @@ struct CalculatorHomeView: View {
     @State private var showImportSheet:   Bool   = false
     @State private var showArchiveAlert:  Bool   = false
     @State private var archiveAlertMessage: String = ""
+    @State private var showEmergencySheet: Bool   = false
 
     // ── Shared managers ───────────────────────────────────────────────────
     @ObservedObject private var drugManager    = DrugManager.shared
@@ -44,7 +45,7 @@ struct CalculatorHomeView: View {
     private var pediatricStatus: PediatricStatus {
         guard let p = ctx.patient else { return .inactive }
         if pediatricOverride { return .active }
-        return PediatricLogic.assess(age: p.age, weightKg: p.weight)
+        return PediatricLogic.assess(age: p.age, weightKg: p.actualWeight)
     }
 
     private var isPediatricActive: Bool { pediatricStatus == .active }
@@ -71,6 +72,9 @@ struct CalculatorHomeView: View {
                             showConsultView = true
                         }
                     }
+                    AirwayCardView()
+                    ABLCardView()
+                    FluidCardView()
                     drugCardsSection
                 }
                 .padding(.horizontal)
@@ -81,8 +85,13 @@ struct CalculatorHomeView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: archiveCurrentPatient) {
-                        Label("归档", systemImage: "doc.badge.plus")
+                    HStack(spacing: 12) {
+                        Button(action: { showEmergencySheet = true }) {
+                            Label("预案", systemImage: "cross.case.fill")
+                        }
+                        Button(action: archiveCurrentPatient) {
+                            Label("归档", systemImage: "doc.badge.plus")
+                        }
                     }
                 }
                 ToolbarItemGroup(placement: .keyboard) {
@@ -104,6 +113,9 @@ struct CalculatorHomeView: View {
             }
             .sheet(isPresented: $showConsultView) {
                 ConsultView(initialQuestion: consultPrefillQuestion)
+            }
+            .sheet(isPresented: $showEmergencySheet) {
+                EmergencySheetView()
             }
             .alert(archiveAlertMessage, isPresented: $showArchiveAlert) {
                 Button("好", role: .cancel) {}

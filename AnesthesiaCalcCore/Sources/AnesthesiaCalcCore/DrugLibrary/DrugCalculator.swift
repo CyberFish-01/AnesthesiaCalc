@@ -121,56 +121,6 @@ public struct DrugDoseRange: Equatable {
     public var volumeString: String { volumeString() }
 }
 
-// MARK: - Patient
-
-/// The primary user-facing patient model.
-///
-/// Property names are intentionally concise (`weight`, `height`, `age`) to
-/// make call sites in the UI and tests easy to read.  Internally the struct
-/// bridges to `PatientContext` for all formula logic, so IBW/LBW are never
-/// duplicated.
-public struct Patient: Equatable {
-
-    /// Total Body Weight — the patient's actual scale weight (kg)
-    public let weight: Double
-    /// Height in centimetres
-    public let height: Double
-    /// Age in completed years
-    public let age: Int
-    public let sex: BiologicalSex
-
-    public init(weight: Double, height: Double, age: Int, sex: BiologicalSex) {
-        self.weight = weight
-        self.height = height
-        self.age    = age
-        self.sex    = sex
-    }
-
-    // ── Derived body-weight scalars ───────────────────────────────────
-    // Delegate to PatientContext so formulas live in exactly one place.
-
-    /// Ideal Body Weight — Devine formula (1974)
-    public var idealBodyWeight: Double { context.idealBodyWeight }
-    /// Lean Body Weight — Janmahasatian formula (2005)
-    public var leanBodyWeight:  Double { context.leanBodyWeight }
-    public var bmi:             Double { context.bmi }
-    public var isElderly:       Bool   { context.isElderly }
-
-    /// Resolve the correct weight scalar for a given `WeightBase`.
-    public func resolvedWeight(for base: WeightBase) -> Double {
-        switch base {
-        case .totalBodyWeight: return weight
-        case .idealBodyWeight: return idealBodyWeight
-        case .leanBodyWeight:  return leanBodyWeight
-        }
-    }
-
-    // ── Internal bridge ───────────────────────────────────────────────
-    public var context: PatientContext {
-        PatientContext(actualWeight: weight, heightCm: height, age: age, sex: sex)
-    }
-}
-
 // MARK: - DrugCalculator
 
 /// Core calculation service.
@@ -214,13 +164,13 @@ public final class DrugCalculator {
     /// Calculate a dose for a patient using the live rule from `AIRuleEngine`.
     ///
     /// - Parameters:
-    ///   - patient:   The patient's demographics (weight, height, age, sex).
+    ///   - patient:   The patient's demographics (actualWeight, heightCm, age, sex).
     ///   - drug:      The `AnesthesiaDrug` to calculate.
     ///   - doseType:  The clinical indication (`DoseType`). Defaults to `.induction`.
     /// - Returns: A `DrugDoseRange` on success, or **`nil`** if `AIRuleEngine` has
     ///   no rule cached for this drug × indication pair.
     public func calculateDose(
-        patient: Patient,
+        patient: PatientContext,
         drug: AnesthesiaDrug,
         doseType: DoseType = .induction
     ) -> DrugDoseRange? {
@@ -243,7 +193,7 @@ public final class DrugCalculator {
         // ── Step 3: Accumulate age-triggered scaling factors ─────────
         // Multiple adjustments compound multiplicatively (e.g. ×0.7 × ×0.8 = ×0.56).
         var ageScale = 1.0
-        for adjustment in rule.ageAdjustments ?? [] where patient.age >= adjustment.ageThreshold {
+        for adjustment in rule.ageAdjustments where patient.age >= adjustment.ageThreshold {
             ageScale *= adjustment.scalingFactor
         }
 
@@ -286,7 +236,7 @@ public final class DrugCalculator {
     ///   - doseTypeString:  The raw doseType string from `DosageRule.doseType`.
     /// - Returns: A `DrugDoseRange` on success, or `nil` when no matching rule is found.
     public func calculateDose(
-        patient: Patient,
+        patient: PatientContext,
         drug: AnesthesiaDrug,
         doseTypeString: String
     ) -> DrugDoseRange? {
@@ -305,7 +255,7 @@ public final class DrugCalculator {
         let weight = patient.resolvedWeight(for: autoWeight.effectiveWeightBase)
 
         var ageScale = 1.0
-        for adjustment in rule.ageAdjustments ?? [] where patient.age >= adjustment.ageThreshold {
+        for adjustment in rule.ageAdjustments where patient.age >= adjustment.ageThreshold {
             ageScale *= adjustment.scalingFactor
         }
 
@@ -344,22 +294,21 @@ public final class DrugCalculator {
     /// drugs added to `DrugManager` at runtime). Use as an explicit fallback when
     /// `calculateDose(patient:drug:doseType:)` returns `nil`.
     public func calculateLegacyDose(
-        patient: Patient,
+        patient: PatientContext,
         drug: AnesthesiaDrug
     ) -> DoseResult? {
         guard let rule = DrugLibrary.rule(for: drug.name) else { return nil }
-        return CalculationEngine.calculate(rule: rule, patient: patient.context)
+        return CalculationEngine.calculate(rule: rule, patient: patient)
     }
 
     /// Calculate a `DoseResult` for every active drug in `DrugManager` simultaneously.
     ///
     /// Drugs without a static `DrugLibrary` entry are silently omitted.
-    public func calculateAll(patient: Patient) -> [AnesthesiaDrug: DoseResult] {
-        let ctx   = patient.context
+    public func calculateAll(patient: PatientContext) -> [AnesthesiaDrug: DoseResult] {
         var out   = [AnesthesiaDrug: DoseResult]()
         for drug in DrugManager.shared.activeDrugs {
             if let rule = DrugLibrary.rule(for: drug.name) {
-                out[drug] = CalculationEngine.calculate(rule: rule, patient: ctx)
+                out[drug] = CalculationEngine.calculate(rule: rule, patient: patient)
             }
         }
         return out

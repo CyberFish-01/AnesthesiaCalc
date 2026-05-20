@@ -56,7 +56,7 @@ public enum RiskEngine {
         }
 
         // Rule 2: obesity — muscle relaxants should use IBW
-        if patient.bmi > 30 && isMuscleRelaxant(drugName) {
+        if patient.bmi > 30 && DrugCatalog.category(for: drugName) == "神经肌肉阻滞药" {
             warnings.append(RiskWarning(
                 message: "肥胖患者，肌松药建议参考理想体重 (IBW)"
             ))
@@ -70,20 +70,20 @@ public enum RiskEngine {
     /// Determine the effective weight basis for a drug × patient combination.
     ///
     /// Clinical rules (applied in order):
-    /// - Muscle relaxants (rocuronium) + BMI > 30 → IBW
-    /// - Lipophilic opioids (fentanyl, remifentanil) + BMI > 32 → LBW
+    /// - Muscle relaxants (DrugCatalog category "神经肌肉阻滞药") + BMI > 30 → IBW
+    /// - Lipophilic opioids (DrugCatalog category "阿片类镇痛药") + BMI > 32 → LBW
     /// - Default → TBW
     ///
     /// This completely replaces the rule's static `weightBase` — the auto-router
     /// is the single source of truth for weight basis selection.
     public static func resolveWeightBase(drugName: String, bmi: Double) -> AutoWeightResult {
         // Rule 1: muscle relaxant + obesity → IBW
-        if isMuscleRelaxant(drugName) && bmi > 30 {
+        if DrugCatalog.category(for: drugName) == "神经肌肉阻滞药" && bmi > 30 {
             return AutoWeightResult(effectiveWeightBase: .idealBodyWeight, wasAutoRouted: true)
         }
 
         // Rule 2: lipophilic opioid + severe obesity → LBW
-        if isLipophilicOpioid(drugName) && bmi > 32 {
+        if DrugCatalog.category(for: drugName) == "阿片类镇痛药" && bmi > 32 {
             return AutoWeightResult(effectiveWeightBase: .leanBodyWeight, wasAutoRouted: true)
         }
 
@@ -92,12 +92,6 @@ public enum RiskEngine {
     }
 
     // MARK: - Drug classification helpers
-
-    private static func isMuscleRelaxant(_ name: String) -> Bool {
-        name == "罗库溴铵"
-    }
-
-    private static func isLipophilicOpioid(_ name: String) -> Bool {
-        name == "芬太尼" || name == "瑞芬太尼"
-    }
+    // Removed: isMuscleRelaxant / isLipophilicOpioid — replaced by
+    // DrugCatalog.category(for:) queries above.
 }
