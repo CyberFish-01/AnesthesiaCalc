@@ -339,7 +339,8 @@ public final class AIAssistantService {
                 .init(role: "system", content: sysDecisionPrompt),
                 .init(role: "user",   content: combinedInput)
             ],
-            temperature: 0.3
+            temperature: 0.3,
+            response_format: nil
         )
         request.httpBody = try JSONEncoder().encode(body)
 
@@ -421,7 +422,8 @@ public final class AIAssistantService {
                 .init(role: "system", content: sysQAPrompt),
                 .init(role: "user",   content: question)
             ],
-            temperature: 0.4
+            temperature: 0.4,
+            response_format: nil
         )
         request.httpBody = try JSONEncoder().encode(body)
 

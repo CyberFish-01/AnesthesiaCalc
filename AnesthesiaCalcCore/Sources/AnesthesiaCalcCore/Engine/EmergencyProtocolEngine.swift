@@ -107,7 +107,7 @@ public enum EmergencyProtocolEngine {
     private static func anaphylaxis(weightKg: Double) -> EmergencyProtocol {
         let epiMcg = min(weightKg * 1, 100)
         let methylpredMg = weightKg * 2
-        EmergencyProtocol(
+        return EmergencyProtocol(
             id: "anaphylaxis",
             name: "过敏性休克",
             recognition: [
@@ -152,7 +152,7 @@ public enum EmergencyProtocolEngine {
 
     private static func malignantHyperthermia(weightKg: Double) -> EmergencyProtocol {
         let dantroleneMg = weightKg * 2.5
-        EmergencyProtocol(
+        return EmergencyProtocol(
             id: "malignant_hyperthermia",
             name: "恶性高热",
             recognition: [
@@ -188,7 +188,7 @@ public enum EmergencyProtocolEngine {
     private static func last(weightKg: Double) -> EmergencyProtocol {
         let bolusMl = weightKg * 1.5
         let infusionMlPerMin = weightKg * 0.25
-        EmergencyProtocol(
+        return EmergencyProtocol(
             id: "last",
             name: "局麻药全身毒性 (LAST)",
             recognition: [
@@ -235,7 +235,7 @@ public enum EmergencyProtocolEngine {
     private static func massiveHemorrhage(weightKg: Double) -> EmergencyProtocol {
         // EBV 估计
         let ebv = weightKg * 70  // 近似成人血容量
-        EmergencyProtocol(
+        return EmergencyProtocol(
             id: "massive_hemorrhage",
             name: "大出血 (MTP)",
             recognition: [
